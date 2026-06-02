@@ -1,0 +1,25 @@
+qdrant:
+  host: localhost
+  port: 6333
+  collection: legal_vn
+
+vllm:
+  base_url: http://localhost:8000/v1
+  model: Qwen/Qwen2.5-7B-Instruct
+
+models:
+  embedder: Qwen/Qwen3-Embedding-8B
+  reranker: Qwen/Qwen3-Reranker-4B
+
+retrieval:
+  top_k_dense: 20
+  top_k_bm25: 20
+  top_k_fusion: 20
+  top_k_rerank: 7
+  rrf_k: 60
+
+generator:
+  temperature: 0.3
+  max_tokens: 2048
+  top_p: 0.9
+  max_articles: 7

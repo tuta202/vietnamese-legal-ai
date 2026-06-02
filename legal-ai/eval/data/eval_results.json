@@ -1,0 +1,1573 @@
+{
+  "macro_f2": 0.3704,
+  "macro_precision": 0.1343,
+  "macro_recall": 0.72,
+  "answer_coverage": 0.8,
+  "n_evaluated": 50,
+  "per_query": [
+    {
+      "id": 1,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 6",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 6",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "45/2019/QH14|Bộ luật Lao động|Điều 154",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 4",
+        "45/2019/QH14|Bộ luật Lao động|Điều 3"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 6"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 6"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 4",
+        "12/2022/NĐ-CP|Điều 6",
+        "45/2019/QH14|Điều 154",
+        "45/2019/QH14|Điều 3",
+        "59/2020/QH14|Điều 218",
+        "80/2021/NĐ-CP|Điều 35"
+      ]
+    },
+    {
+      "id": 2,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 182",
+        "45/2019/QH14|Bộ luật Lao động|Điều 188",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "45/2019/QH14|Bộ luật Lao động|Điều 193",
+        "45/2019/QH14|Bộ luật Lao động|Điều 189",
+        "45/2019/QH14|Bộ luật Lao động|Điều 197",
+        "45/2019/QH14|Bộ luật Lao động|Điều 180"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 182"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 182"
+      ],
+      "missed": [],
+      "extra": [
+        "45/2019/QH14|Điều 180",
+        "45/2019/QH14|Điều 188",
+        "45/2019/QH14|Điều 189",
+        "45/2019/QH14|Điều 193",
+        "45/2019/QH14|Điều 197",
+        "45/2019/QH14|Điều 220"
+      ]
+    },
+    {
+      "id": 3,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 161",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 137",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 59",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 16",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 17",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 109"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 161"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 161"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 59",
+        "219/2013/TT-BTC|Điều 16",
+        "59/2020/QH14|Điều 109",
+        "59/2020/QH14|Điều 137",
+        "59/2020/QH14|Điều 218",
+        "78/2014/TT-BTC|Điều 17"
+      ]
+    },
+    {
+      "id": 4,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 94",
+        "45/2019/QH14|Bộ luật Lao động|Điều 100",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 163",
+        "45/2019/QH14|Bộ luật Lao động|Điều 53",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "45/2019/QH14|Bộ luật Lao động|Điều 162"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 94"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 94"
+      ],
+      "missed": [],
+      "extra": [
+        "38/2019/QH14|Điều 3",
+        "45/2019/QH14|Điều 100",
+        "45/2019/QH14|Điều 162",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 53",
+        "59/2020/QH14|Điều 163"
+      ]
+    },
+    {
+      "id": 5,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 139",
+        "45/2019/QH14|Bộ luật Lao động|Điều 141",
+        "45/2019/QH14|Bộ luật Lao động|Điều 140",
+        "45/2019/QH14|Bộ luật Lao động|Điều 122",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 28",
+        "45/2019/QH14|Bộ luật Lao động|Điều 137",
+        "45/2019/QH14|Bộ luật Lao động|Điều 53"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 139"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 139"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 28",
+        "45/2019/QH14|Điều 122",
+        "45/2019/QH14|Điều 137",
+        "45/2019/QH14|Điều 140",
+        "45/2019/QH14|Điều 141",
+        "45/2019/QH14|Điều 53"
+      ]
+    },
+    {
+      "id": 6,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 3",
+        "45/2019/QH14|Bộ luật Lao động|Điều 217",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 34",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 19",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13",
+        "45/2019/QH14|Bộ luật Lao động|Điều 53"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 209"
+      ],
+      "correct": [],
+      "missed": [
+        "45/2019/QH14|Điều 209"
+      ],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 13",
+        "12/2022/NĐ-CP|Điều 19",
+        "12/2022/NĐ-CP|Điều 34",
+        "45/2019/QH14|Điều 217",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 3",
+        "45/2019/QH14|Điều 53"
+      ]
+    },
+    {
+      "id": 7,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 163",
+        "45/2019/QH14|Bộ luật Lao động|Điều 164",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 30",
+        "45/2019/QH14|Bộ luật Lao động|Điều 161",
+        "45/2019/QH14|Bộ luật Lao động|Điều 162",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 42",
+        "45/2019/QH14|Bộ luật Lao động|Điều 165"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 164"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 164"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 30",
+        "12/2022/NĐ-CP|Điều 42",
+        "45/2019/QH14|Điều 161",
+        "45/2019/QH14|Điều 162",
+        "45/2019/QH14|Điều 163",
+        "45/2019/QH14|Điều 165"
+      ]
+    },
+    {
+      "id": 8,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 57",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 43",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 19",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 22",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 57"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 57"
+      ],
+      "missed": [],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 19",
+        "123/2020/NĐ-CP|Điều 22",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 43",
+        "123/2020/NĐ-CP|Điều 61",
+        "38/2019/QH14|Điều 152"
+      ]
+    },
+    {
+      "id": 9,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 11",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 12",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 5",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 7",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 10",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 19"
+      ],
+      "expected": [
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 11"
+      ],
+      "correct": [
+        "219/2013/TT-BTC|Điều 11"
+      ],
+      "missed": [],
+      "extra": [
+        "219/2013/TT-BTC|Điều 10",
+        "219/2013/TT-BTC|Điều 12",
+        "219/2013/TT-BTC|Điều 22",
+        "219/2013/TT-BTC|Điều 5",
+        "219/2013/TT-BTC|Điều 7",
+        "78/2014/TT-BTC|Điều 19"
+      ]
+    },
+    {
+      "id": 10,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 213",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 15",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 162",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 8",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 3",
+        "61/2020/QH14|Luật Đầu tư|Điều 171",
+        "61/2020/QH14|Luật Đầu tư|Điều 69"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 213"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 213"
+      ],
+      "missed": [],
+      "extra": [
+        "38/2019/QH14|Điều 15",
+        "59/2020/QH14|Điều 162",
+        "61/2020/QH14|Điều 171",
+        "61/2020/QH14|Điều 69",
+        "78/2014/TT-BTC|Điều 8",
+        "80/2021/NĐ-CP|Điều 3"
+      ]
+    },
+    {
+      "id": 11,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "61/2020/QH14|Luật Đầu tư|Điều 71",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 17",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 3",
+        "61/2020/QH14|Luật Đầu tư|Điều 3",
+        "61/2020/QH14|Luật Đầu tư|Điều 69",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 13"
+      ],
+      "expected": [
+        "61/2020/QH14|Luật Đầu tư|Điều 71"
+      ],
+      "correct": [
+        "61/2020/QH14|Điều 71"
+      ],
+      "missed": [],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 13",
+        "01/2021/NĐ-CP|Điều 17",
+        "01/2021/NĐ-CP|Điều 3",
+        "38/2019/QH14|Điều 3",
+        "61/2020/QH14|Điều 3",
+        "61/2020/QH14|Điều 69"
+      ]
+    },
+    {
+      "id": 12,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 108",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 28",
+        "45/2019/QH14|Bộ luật Lao động|Điều 107",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 29",
+        "45/2019/QH14|Bộ luật Lao động|Điều 137",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 18"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 108"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 108"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 18",
+        "12/2022/NĐ-CP|Điều 28",
+        "12/2022/NĐ-CP|Điều 29",
+        "45/2019/QH14|Điều 107",
+        "45/2019/QH14|Điều 137",
+        "45/2019/QH14|Điều 220"
+      ]
+    },
+    {
+      "id": 13,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 1",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 138",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 3",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 59",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 46",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 49",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 136"
+      ],
+      "expected": [
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 3"
+      ],
+      "correct": [
+        "12/2022/NĐ-CP|Điều 3"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 1",
+        "12/2022/NĐ-CP|Điều 46",
+        "12/2022/NĐ-CP|Điều 49",
+        "12/2022/NĐ-CP|Điều 59",
+        "38/2019/QH14|Điều 136",
+        "38/2019/QH14|Điều 138"
+      ]
+    },
+    {
+      "id": 14,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 23",
+        "14/2008/QH12|Luật Thuế thu nhập doanh nghiệp|Điều 19",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 22",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 20",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 18",
+        "61/2020/QH14|Luật Đầu tư|Điều 15",
+        "14/2008/QH12|Luật Thuế thu nhập doanh nghiệp|Điều 14"
+      ],
+      "expected": [
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 20"
+      ],
+      "correct": [
+        "78/2014/TT-BTC|Điều 20"
+      ],
+      "missed": [],
+      "extra": [
+        "14/2008/QH12|Điều 14",
+        "14/2008/QH12|Điều 19",
+        "61/2020/QH14|Điều 15",
+        "78/2014/TT-BTC|Điều 18",
+        "78/2014/TT-BTC|Điều 22",
+        "78/2014/TT-BTC|Điều 23"
+      ]
+    },
+    {
+      "id": 15,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 50",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 49",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 47",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 22",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 16"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 50"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 50"
+      ],
+      "missed": [],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 16",
+        "123/2020/NĐ-CP|Điều 22",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 47",
+        "123/2020/NĐ-CP|Điều 49",
+        "123/2020/NĐ-CP|Điều 61"
+      ]
+    },
+    {
+      "id": 16,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 145",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 146",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 148",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 140",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 170",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 115"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 145"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 145"
+      ],
+      "missed": [],
+      "extra": [
+        "59/2020/QH14|Điều 115",
+        "59/2020/QH14|Điều 140",
+        "59/2020/QH14|Điều 146",
+        "59/2020/QH14|Điều 148",
+        "59/2020/QH14|Điều 170",
+        "59/2020/QH14|Điều 218"
+      ]
+    },
+    {
+      "id": 17,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 167",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 64",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 4",
+        "45/2019/QH14|Bộ luật Lao động|Điều 3",
+        "45/2019/QH14|Bộ luật Lao động|Điều 188",
+        "45/2019/QH14|Bộ luật Lao động|Điều 5"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 167"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 167"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 4",
+        "12/2022/NĐ-CP|Điều 64",
+        "45/2019/QH14|Điều 188",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 3",
+        "45/2019/QH14|Điều 5"
+      ]
+    },
+    {
+      "id": 18,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 194",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 88",
+        "45/2019/QH14|Bộ luật Lao động|Điều 3",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 6",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 14",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 194"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 194"
+      ],
+      "missed": [],
+      "extra": [
+        "219/2013/TT-BTC|Điều 14",
+        "219/2013/TT-BTC|Điều 22",
+        "38/2019/QH14|Điều 3",
+        "45/2019/QH14|Điều 3",
+        "59/2020/QH14|Điều 88",
+        "78/2014/TT-BTC|Điều 6"
+      ]
+    },
+    {
+      "id": 19,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 9",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 35",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 5",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 4",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 18",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 20"
+      ],
+      "expected": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 9"
+      ],
+      "correct": [
+        "80/2021/NĐ-CP|Điều 9"
+      ],
+      "missed": [],
+      "extra": [
+        "04/2017/QH14|Điều 18",
+        "04/2017/QH14|Điều 35",
+        "04/2017/QH14|Điều 4",
+        "80/2021/NĐ-CP|Điều 20",
+        "80/2021/NĐ-CP|Điều 35",
+        "80/2021/NĐ-CP|Điều 5"
+      ]
+    },
+    {
+      "id": 20,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 44",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 5",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 109",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 47",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 81",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 16"
+      ],
+      "expected": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 43"
+      ],
+      "correct": [],
+      "missed": [
+        "38/2019/QH14|Điều 43"
+      ],
+      "extra": [
+        "219/2013/TT-BTC|Điều 16",
+        "219/2013/TT-BTC|Điều 5",
+        "38/2019/QH14|Điều 109",
+        "38/2019/QH14|Điều 3",
+        "38/2019/QH14|Điều 44",
+        "38/2019/QH14|Điều 47",
+        "38/2019/QH14|Điều 81"
+      ]
+    },
+    {
+      "id": 21,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 50",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 136",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 141",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 59",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 19",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 16"
+      ],
+      "expected": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 50"
+      ],
+      "correct": [
+        "38/2019/QH14|Điều 50"
+      ],
+      "missed": [],
+      "extra": [
+        "38/2019/QH14|Điều 136",
+        "38/2019/QH14|Điều 141",
+        "38/2019/QH14|Điều 152",
+        "38/2019/QH14|Điều 16",
+        "38/2019/QH14|Điều 19",
+        "38/2019/QH14|Điều 59"
+      ]
+    },
+    {
+      "id": 22,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 108",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 112",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 109",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 110",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 119",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 142"
+      ],
+      "expected": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 108"
+      ],
+      "correct": [
+        "38/2019/QH14|Điều 108"
+      ],
+      "missed": [],
+      "extra": [
+        "38/2019/QH14|Điều 109",
+        "38/2019/QH14|Điều 110",
+        "38/2019/QH14|Điều 112",
+        "38/2019/QH14|Điều 119",
+        "38/2019/QH14|Điều 142",
+        "38/2019/QH14|Điều 152"
+      ]
+    },
+    {
+      "id": 23,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "61/2020/QH14|Luật Đầu tư|Điều 63",
+        "61/2020/QH14|Luật Đầu tư|Điều 57",
+        "61/2020/QH14|Luật Đầu tư|Điều 54",
+        "61/2020/QH14|Luật Đầu tư|Điều 59",
+        "61/2020/QH14|Luật Đầu tư|Điều 60",
+        "61/2020/QH14|Luật Đầu tư|Điều 61",
+        "61/2020/QH14|Luật Đầu tư|Điều 171"
+      ],
+      "expected": [
+        "61/2020/QH14|Luật Đầu tư|Điều 59"
+      ],
+      "correct": [
+        "61/2020/QH14|Điều 59"
+      ],
+      "missed": [],
+      "extra": [
+        "61/2020/QH14|Điều 171",
+        "61/2020/QH14|Điều 54",
+        "61/2020/QH14|Điều 57",
+        "61/2020/QH14|Điều 60",
+        "61/2020/QH14|Điều 61",
+        "61/2020/QH14|Điều 63"
+      ]
+    },
+    {
+      "id": 24,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 27",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 24",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 28",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 16",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 39"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 27"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 27"
+      ],
+      "missed": [],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 24",
+        "123/2020/NĐ-CP|Điều 28",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 39",
+        "123/2020/NĐ-CP|Điều 61",
+        "219/2013/TT-BTC|Điều 16"
+      ]
+    },
+    {
+      "id": 25,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 28",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 53",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 17",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 50"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 53"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 53"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 13",
+        "123/2020/NĐ-CP|Điều 28",
+        "123/2020/NĐ-CP|Điều 50",
+        "123/2020/NĐ-CP|Điều 61",
+        "38/2019/QH14|Điều 17",
+        "38/2019/QH14|Điều 3"
+      ]
+    },
+    {
+      "id": 26,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 148",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 5",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 124",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 4",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 188",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 4"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 114"
+      ],
+      "correct": [],
+      "missed": [
+        "59/2020/QH14|Điều 114"
+      ],
+      "extra": [
+        "219/2013/TT-BTC|Điều 4",
+        "219/2013/TT-BTC|Điều 5",
+        "59/2020/QH14|Điều 124",
+        "59/2020/QH14|Điều 148",
+        "59/2020/QH14|Điều 188",
+        "59/2020/QH14|Điều 218",
+        "59/2020/QH14|Điều 4"
+      ]
+    },
+    {
+      "id": 27,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 64",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 149",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 50",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 101",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 61",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 29"
+      ],
+      "expected": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 64"
+      ],
+      "correct": [
+        "01/2021/NĐ-CP|Điều 64"
+      ],
+      "missed": [],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 101",
+        "01/2021/NĐ-CP|Điều 29",
+        "01/2021/NĐ-CP|Điều 50",
+        "59/2020/QH14|Điều 149",
+        "59/2020/QH14|Điều 218",
+        "59/2020/QH14|Điều 61"
+      ]
+    },
+    {
+      "id": 28,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 76",
+        "45/2019/QH14|Bộ luật Lao động|Điều 83",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 16",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "45/2019/QH14|Bộ luật Lao động|Điều 70",
+        "45/2019/QH14|Bộ luật Lao động|Điều 75",
+        "45/2019/QH14|Bộ luật Lao động|Điều 86"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 76"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 76"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 16",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 70",
+        "45/2019/QH14|Điều 75",
+        "45/2019/QH14|Điều 83",
+        "45/2019/QH14|Điều 86"
+      ]
+    },
+    {
+      "id": 29,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 21",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 25",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 64",
+        "45/2019/QH14|Bộ luật Lao động|Điều 134",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 22",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 24"
+      ],
+      "expected": [
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 21"
+      ],
+      "correct": [
+        "12/2022/NĐ-CP|Điều 21"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 13",
+        "12/2022/NĐ-CP|Điều 22",
+        "12/2022/NĐ-CP|Điều 24",
+        "12/2022/NĐ-CP|Điều 25",
+        "12/2022/NĐ-CP|Điều 64",
+        "45/2019/QH14|Điều 134"
+      ]
+    },
+    {
+      "id": 30,
+      "f2": 0.4545,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 26",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 10",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "45/2019/QH14|Bộ luật Lao động|Điều 97",
+        "45/2019/QH14|Bộ luật Lao động|Điều 99",
+        "45/2019/QH14|Bộ luật Lao động|Điều 101",
+        "45/2019/QH14|Bộ luật Lao động|Điều 29"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 26"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 26"
+      ],
+      "missed": [],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 10",
+        "45/2019/QH14|Điều 101",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 29",
+        "45/2019/QH14|Điều 97",
+        "45/2019/QH14|Điều 99"
+      ]
+    },
+    {
+      "id": 31,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 57",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 98",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 157",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 140",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 183",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 183",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 28"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 183"
+      ],
+      "missed": [
+        "38/2019/QH14|Điều 28"
+      ],
+      "extra": [
+        "59/2020/QH14|Điều 140",
+        "59/2020/QH14|Điều 157",
+        "59/2020/QH14|Điều 218",
+        "59/2020/QH14|Điều 57",
+        "59/2020/QH14|Điều 98",
+        "80/2021/NĐ-CP|Điều 35"
+      ]
+    },
+    {
+      "id": 32,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 28",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 71",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 17",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 7",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 65",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 109"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 173",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 112"
+      ],
+      "correct": [],
+      "missed": [
+        "38/2019/QH14|Điều 112",
+        "59/2020/QH14|Điều 173"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 17",
+        "01/2021/NĐ-CP|Điều 7",
+        "59/2020/QH14|Điều 109",
+        "59/2020/QH14|Điều 218",
+        "59/2020/QH14|Điều 65",
+        "59/2020/QH14|Điều 71",
+        "80/2021/NĐ-CP|Điều 28"
+      ]
+    },
+    {
+      "id": 33,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 7",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 39",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 14",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 19",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22"
+      ],
+      "expected": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 13",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 10"
+      ],
+      "correct": [],
+      "missed": [
+        "04/2017/QH14|Điều 10",
+        "38/2019/QH14|Điều 13"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 7",
+        "123/2020/NĐ-CP|Điều 39",
+        "123/2020/NĐ-CP|Điều 61",
+        "219/2013/TT-BTC|Điều 14",
+        "219/2013/TT-BTC|Điều 19",
+        "219/2013/TT-BTC|Điều 22",
+        "80/2021/NĐ-CP|Điều 35"
+      ]
+    },
+    {
+      "id": 34,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 6",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 19",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 8",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 43",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 7"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 6",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 132"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 6"
+      ],
+      "missed": [
+        "38/2019/QH14|Điều 132"
+      ],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 19",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 43",
+        "123/2020/NĐ-CP|Điều 61",
+        "123/2020/NĐ-CP|Điều 7",
+        "123/2020/NĐ-CP|Điều 8"
+      ]
+    },
+    {
+      "id": 35,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 3",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 200",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 5",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 200",
+        "45/2019/QH14|Bộ luật Lao động|Điều 205"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 200"
+      ],
+      "missed": [
+        "45/2019/QH14|Điều 205"
+      ],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 13",
+        "219/2013/TT-BTC|Điều 5",
+        "38/2019/QH14|Điều 3",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 3",
+        "59/2020/QH14|Điều 218"
+      ]
+    },
+    {
+      "id": 36,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 51",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 49",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 9",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 50",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 22"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 51",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 40"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 51"
+      ],
+      "missed": [
+        "01/2021/NĐ-CP|Điều 40"
+      ],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 22",
+        "123/2020/NĐ-CP|Điều 49",
+        "123/2020/NĐ-CP|Điều 50",
+        "123/2020/NĐ-CP|Điều 61",
+        "123/2020/NĐ-CP|Điều 9",
+        "38/2019/QH14|Điều 152"
+      ]
+    },
+    {
+      "id": 37,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 28",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 17",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 1",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 35",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 32",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 27"
+      ],
+      "expected": [
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 17",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 9"
+      ],
+      "correct": [
+        "04/2017/QH14|Điều 17"
+      ],
+      "missed": [
+        "80/2021/NĐ-CP|Điều 9"
+      ],
+      "extra": [
+        "04/2017/QH14|Điều 35",
+        "80/2021/NĐ-CP|Điều 1",
+        "80/2021/NĐ-CP|Điều 27",
+        "80/2021/NĐ-CP|Điều 28",
+        "80/2021/NĐ-CP|Điều 32",
+        "80/2021/NĐ-CP|Điều 35"
+      ]
+    },
+    {
+      "id": 38,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 45",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 19",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 44",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 93",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 46"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 45",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 30"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 45"
+      ],
+      "missed": [
+        "04/2017/QH14|Điều 30"
+      ],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 19",
+        "123/2020/NĐ-CP|Điều 44",
+        "123/2020/NĐ-CP|Điều 46",
+        "123/2020/NĐ-CP|Điều 61",
+        "38/2019/QH14|Điều 152",
+        "38/2019/QH14|Điều 93"
+      ]
+    },
+    {
+      "id": 39,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 10",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 3",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 3",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 101",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 29",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 39"
+      ],
+      "expected": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 10",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 135"
+      ],
+      "correct": [
+        "01/2021/NĐ-CP|Điều 10"
+      ],
+      "missed": [
+        "38/2019/QH14|Điều 135"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 101",
+        "01/2021/NĐ-CP|Điều 29",
+        "01/2021/NĐ-CP|Điều 3",
+        "38/2019/QH14|Điều 152",
+        "38/2019/QH14|Điều 3",
+        "38/2019/QH14|Điều 39"
+      ]
+    },
+    {
+      "id": 40,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 8",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 55",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 13",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 4",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 55",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 150"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 55"
+      ],
+      "missed": [
+        "38/2019/QH14|Điều 150"
+      ],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 13",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 4",
+        "123/2020/NĐ-CP|Điều 61",
+        "123/2020/NĐ-CP|Điều 8",
+        "219/2013/TT-BTC|Điều 22"
+      ]
+    },
+    {
+      "id": 41,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "14/2008/QH12|Luật Thuế thu nhập doanh nghiệp|Điều 20",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 19",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 7",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 23",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 8",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 16"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 2",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 2"
+      ],
+      "correct": [],
+      "missed": [
+        "12/2022/NĐ-CP|Điều 2",
+        "123/2020/NĐ-CP|Điều 2"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 19",
+        "01/2021/NĐ-CP|Điều 7",
+        "13/2008/QH12|Điều 16",
+        "14/2008/QH12|Điều 20",
+        "219/2013/TT-BTC|Điều 22",
+        "78/2014/TT-BTC|Điều 23",
+        "78/2014/TT-BTC|Điều 8"
+      ]
+    },
+    {
+      "id": 42,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 151",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 149",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 218",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 150",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 64",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 101",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 148"
+      ],
+      "expected": [
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 151",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 39"
+      ],
+      "correct": [
+        "59/2020/QH14|Điều 151"
+      ],
+      "missed": [
+        "123/2020/NĐ-CP|Điều 39"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 101",
+        "01/2021/NĐ-CP|Điều 64",
+        "59/2020/QH14|Điều 148",
+        "59/2020/QH14|Điều 149",
+        "59/2020/QH14|Điều 150",
+        "59/2020/QH14|Điều 218"
+      ]
+    },
+    {
+      "id": 43,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 6",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 125",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 24",
+        "45/2019/QH14|Bộ luật Lao động|Điều 156",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 39"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 156",
+        "14/2008/QH12|Luật Thuế thu nhập doanh nghiệp|Điều 12"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 156"
+      ],
+      "missed": [
+        "14/2008/QH12|Điều 12"
+      ],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 13",
+        "38/2019/QH14|Điều 125",
+        "38/2019/QH14|Điều 39",
+        "45/2019/QH14|Điều 220",
+        "78/2014/TT-BTC|Điều 24",
+        "78/2014/TT-BTC|Điều 6"
+      ]
+    },
+    {
+      "id": 44,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 3",
+        "45/2019/QH14|Bộ luật Lao động|Điều 7",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 59",
+        "45/2019/QH14|Bộ luật Lao động|Điều 212",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 64",
+        "45/2019/QH14|Bộ luật Lao động|Điều 220",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 21"
+      ],
+      "expected": [
+        "45/2019/QH14|Bộ luật Lao động|Điều 7",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 31"
+      ],
+      "correct": [
+        "45/2019/QH14|Điều 7"
+      ],
+      "missed": [
+        "12/2022/NĐ-CP|Điều 31"
+      ],
+      "extra": [
+        "12/2022/NĐ-CP|Điều 21",
+        "12/2022/NĐ-CP|Điều 59",
+        "12/2022/NĐ-CP|Điều 64",
+        "45/2019/QH14|Điều 212",
+        "45/2019/QH14|Điều 220",
+        "45/2019/QH14|Điều 3"
+      ]
+    },
+    {
+      "id": 45,
+      "f2": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "predicted": [
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 12",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 22",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 14",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 4",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 5",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 21",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 13"
+      ],
+      "expected": [
+        "78/2014/TT-BTC|Thông tư Hướng dẫn thuế TNDN|Điều 16",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 18"
+      ],
+      "correct": [],
+      "missed": [
+        "219/2013/TT-BTC|Điều 18",
+        "78/2014/TT-BTC|Điều 16"
+      ],
+      "extra": [
+        "219/2013/TT-BTC|Điều 12",
+        "219/2013/TT-BTC|Điều 13",
+        "219/2013/TT-BTC|Điều 14",
+        "219/2013/TT-BTC|Điều 21",
+        "219/2013/TT-BTC|Điều 22",
+        "219/2013/TT-BTC|Điều 4",
+        "219/2013/TT-BTC|Điều 5"
+      ]
+    },
+    {
+      "id": 46,
+      "f2": 0.6667,
+      "precision": 0.2857,
+      "recall": 1.0,
+      "predicted": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 74",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 75",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 77",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 93",
+        "59/2020/QH14|Luật Doanh nghiệp|Điều 212",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 101",
+        "12/2022/NĐ-CP|Nghị định Xử phạt lao động|Điều 13"
+      ],
+      "expected": [
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 74",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 75"
+      ],
+      "correct": [
+        "01/2021/NĐ-CP|Điều 74",
+        "01/2021/NĐ-CP|Điều 75"
+      ],
+      "missed": [],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 101",
+        "01/2021/NĐ-CP|Điều 77",
+        "01/2021/NĐ-CP|Điều 93",
+        "12/2022/NĐ-CP|Điều 13",
+        "59/2020/QH14|Điều 212"
+      ]
+    },
+    {
+      "id": 47,
+      "f2": 0.7895,
+      "precision": 0.4286,
+      "recall": 1.0,
+      "predicted": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 26",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 35",
+        "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 19",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 27",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 28",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 4"
+      ],
+      "expected": [
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 26",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 27",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 28"
+      ],
+      "correct": [
+        "80/2021/NĐ-CP|Điều 26",
+        "80/2021/NĐ-CP|Điều 27",
+        "80/2021/NĐ-CP|Điều 28"
+      ],
+      "missed": [],
+      "extra": [
+        "04/2017/QH14|Điều 19",
+        "04/2017/QH14|Điều 35",
+        "80/2021/NĐ-CP|Điều 35",
+        "80/2021/NĐ-CP|Điều 4"
+      ]
+    },
+    {
+      "id": 48,
+      "f2": 0.2632,
+      "precision": 0.1429,
+      "recall": 0.3333,
+      "predicted": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 16",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 61",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 13",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 19",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 3",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 15",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 24"
+      ],
+      "expected": [
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 16",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 17",
+        "123/2020/NĐ-CP|Nghị định Hóa đơn chứng từ|Điều 18"
+      ],
+      "correct": [
+        "123/2020/NĐ-CP|Điều 16"
+      ],
+      "missed": [
+        "123/2020/NĐ-CP|Điều 17",
+        "123/2020/NĐ-CP|Điều 18"
+      ],
+      "extra": [
+        "123/2020/NĐ-CP|Điều 13",
+        "123/2020/NĐ-CP|Điều 15",
+        "123/2020/NĐ-CP|Điều 19",
+        "123/2020/NĐ-CP|Điều 24",
+        "123/2020/NĐ-CP|Điều 3",
+        "123/2020/NĐ-CP|Điều 61"
+      ]
+    },
+    {
+      "id": 49,
+      "f2": 0.3333,
+      "precision": 0.1429,
+      "recall": 0.5,
+      "predicted": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 152",
+        "01/2021/NĐ-CP|Nghị định Đăng ký doanh nghiệp|Điều 101",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 16",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 35",
+        "80/2021/NĐ-CP|Nghị định Hỗ trợ DNNVV|Điều 13",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 48",
+        "61/2020/QH14|Luật Đầu tư|Điều 57"
+      ],
+      "expected": [
+        "38/2019/QH14|Luật Quản lý thuế|Điều 48",
+        "38/2019/QH14|Luật Quản lý thuế|Điều 49"
+      ],
+      "correct": [
+        "38/2019/QH14|Điều 48"
+      ],
+      "missed": [
+        "38/2019/QH14|Điều 49"
+      ],
+      "extra": [
+        "01/2021/NĐ-CP|Điều 101",
+        "219/2013/TT-BTC|Điều 16",
+        "38/2019/QH14|Điều 152",
+        "61/2020/QH14|Điều 57",
+        "80/2021/NĐ-CP|Điều 13",
+        "80/2021/NĐ-CP|Điều 35"
+      ]
+    },
+    {
+      "id": 50,
+      "f2": 0.5263,
+      "precision": 0.2857,
+      "recall": 0.6667,
+      "predicted": [
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 16",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 13",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 11",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 9",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 12",
+        "219/2013/TT-BTC|Thông tư Hướng dẫn thuế GTGT|Điều 14",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 14"
+      ],
+      "expected": [
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 9",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 10",
+        "13/2008/QH12|Luật Thuế giá trị gia tăng|Điều 11"
+      ],
+      "correct": [
+        "13/2008/QH12|Điều 11",
+        "13/2008/QH12|Điều 9"
+      ],
+      "missed": [
+        "13/2008/QH12|Điều 10"
+      ],
+      "extra": [
+        "13/2008/QH12|Điều 14",
+        "13/2008/QH12|Điều 16",
+        "219/2013/TT-BTC|Điều 12",
+        "219/2013/TT-BTC|Điều 13",
+        "219/2013/TT-BTC|Điều 14"
+      ]
+    }
+  ],
+  "summary": "F2=0.3704 P=0.1343 R=0.7200 Coverage=80%"
+}

@@ -1,0 +1,101 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage
+.pytest_cache/
+.cache/
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+
+# Type checkers / linters
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Virtual environments
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Secrets / credentials (never commit)
+# ---------------------------------------------------------------------------
+*.pem
+*.key
+service-account*.json
+gcp-credentials*.json
+credentials.json
+
+# ---------------------------------------------------------------------------
+# Project artifacts (regenerable — keep out of version control)
+# ---------------------------------------------------------------------------
+# Built BM25 index (binary pickle, ~13MB, rebuilt from corpus.json)
+*.pkl
+legal-ai/retrieval/data/
+
+# Packaged competition submission (rebuilt by submit.py)
+legal-ai/submission/submission.zip
+*.zip
+
+# ---------------------------------------------------------------------------
+# IDE / editor
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ---------------------------------------------------------------------------
+# OS
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------------------------------------------------------------------------
+# Claude Code (local machine settings only)
+# ---------------------------------------------------------------------------
+.claude/settings.local.json
