@@ -1,0 +1,4 @@
+# vLLM / Qwen backend (backend: vllm). Requires a GPU for the local models.
+-r requirements.txt
+sentence-transformers>=2.2   # Qwen3-Embedding + Qwen3-Reranker (cross-encoder)
+openai>=1.0                  # OpenAI-compatible client for the vLLM chat endpoint
