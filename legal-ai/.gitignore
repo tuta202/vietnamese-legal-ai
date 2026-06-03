@@ -5,6 +5,8 @@
 results*.json
 submission/
 *.zip
+eval/data/eval_predictions.json
+eval/data/eval_results.json
 
 # Python
 __pycache__/
