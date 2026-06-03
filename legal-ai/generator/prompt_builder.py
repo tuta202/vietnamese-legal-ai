@@ -48,7 +48,11 @@ văn phong hành chính khô khan quá mức.
 
 8. KẾT THÚC câu trả lời PHẢI có đúng đoạn văn sau (nguyên văn):
    "Lưu ý: Đây là tư vấn sơ bộ dựa trên văn bản pháp luật được cung cấp. Để được \
-tư vấn chính xác, vui lòng liên hệ luật sư hoặc cơ quan có thẩm quyền."\
+tư vấn chính xác, vui lòng liên hệ luật sư hoặc cơ quan có thẩm quyền."
+
+9. BẮT BUỘC: Dù câu hỏi hỏi về văn bản, phạm vi áp dụng, hay đối tượng áp dụng, \
+câu trả lời PHẢI trích dẫn ít nhất một "Điều X" cụ thể từ văn bản liên quan. \
+Ví dụ: "Theo Điều 1 [Tên luật], phạm vi áp dụng bao gồm..."\
 """
 
 _DISCLAIMER = (
