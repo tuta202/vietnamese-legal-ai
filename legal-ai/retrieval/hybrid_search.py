@@ -120,12 +120,14 @@ class HybridSearcher:
         return self._rewrite.rewrite(question)
 
     def _dense_search(self, vector: np.ndarray) -> list[tuple[str, float]]:
-        """Call Qdrant and return [(chunk_id, score), ...]."""
-        results = self._qdrant.search(
+        """Call Qdrant (query_points) and return [(chunk_id, score), ...]."""
+        resp = self._qdrant.query_points(
             collection_name=self.config.qdrant.collection,
-            query_vector=vector.tolist(),
+            query=vector.tolist(),
             limit=self.config.retrieval.top_k_dense,
+            with_payload=True,
         )
+        results = getattr(resp, "points", resp)
         # Handle both real ScoredPoint and mock dicts
         out = []
         for r in results:

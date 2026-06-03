@@ -47,7 +47,61 @@ def _validate_config(config: RetrievalConfig) -> list[str]:
 
 def _qdrant_client(config: RetrievalConfig):
     from qdrant_client import QdrantClient
-    return QdrantClient(url=config.qdrant.url, api_key=config.qdrant.api_key)
+    # Generous timeout — the free Qdrant Cloud tier can be slow on upserts.
+    return QdrantClient(url=config.qdrant.url, api_key=config.qdrant.api_key, timeout=120)
+
+
+def _index_corpus(client, embedder, config: RetrievalConfig, articles: list[dict]) -> int:
+    """
+    Resilient batched embed + upsert (wait=False, per-batch retry).
+    Idempotent (point id = chunk_id), so re-running fills any gaps without
+    re-embedding completed batches within a run.
+    """
+    import time
+    import uuid
+    from qdrant_client.models import PointStruct
+
+    bs = max(1, int(config.embedding.batch_size))
+    total = len(articles)
+    done = 0
+    for i in range(0, total, bs):
+        batch = articles[i:i + bs]
+        texts = [embedder._format_document(a) for a in batch]
+        vectors = embedder.embed_documents(texts)
+        points = [
+            PointStruct(
+                id=str(uuid.UUID(a["chunk_id"])),
+                vector=vec.tolist(),
+                payload={
+                    "chunk_id":             a["chunk_id"],
+                    "law_id":               a["law_id"],
+                    "law_type":             a["law_type"],
+                    "law_name":             a["law_name"],
+                    "dieu_number":          a["dieu_number"],
+                    "dieu_title":           a["dieu_title"],
+                    "content":              a["content"],
+                    "relevant_doc_str":     a["relevant_doc_str"],
+                    "relevant_article_str": a["relevant_article_str"],
+                },
+            )
+            for a, vec in zip(batch, vectors)
+        ]
+        for attempt in range(4):
+            try:
+                client.upsert(collection_name=config.qdrant.collection,
+                              points=points, wait=False)
+                break
+            except Exception as e:
+                if attempt == 3:
+                    raise
+                wait_s = 2 * (attempt + 1)
+                print(f"\n  [retry] upsert batch failed ({type(e).__name__}); "
+                      f"retrying in {wait_s}s…")
+                time.sleep(wait_s)
+        done += len(points)
+        print(f"  upserted {done}/{total}", end="\r", flush=True)
+    print()
+    return done
 
 
 def _ensure_collection(client, config: RetrievalConfig, force: bool) -> None:
@@ -127,16 +181,17 @@ def main() -> None:
     _ensure_collection(client, config, force=args.force)
     articles = json.loads(Path(args.corpus).read_text(encoding="utf-8"))["articles"]
     print(f"  {len(articles)} articles loaded")
-    n = embedder.embed_corpus(articles, qdrant_client=client)
+    n = _index_corpus(client, embedder, config, articles)
     print(f"  ✓ indexed {n} articles into '{config.qdrant.collection}'")
 
     # 6. Test search
     print("\n[6/6] Test search: 'doanh nghiệp nhỏ và vừa' (top 5)…")
     q_vec = embedder.embed_query("doanh nghiệp nhỏ và vừa").tolist()
-    hits = client.search(
-        collection_name=config.qdrant.collection, query_vector=q_vec, limit=5
+    resp = client.query_points(
+        collection_name=config.qdrant.collection, query=q_vec, limit=5,
+        with_payload=True,
     )
-    for rank, h in enumerate(hits, 1):
+    for rank, h in enumerate(resp.points, 1):
         p = h.payload or {}
         print(f"  {rank}. [{p.get('law_id','')}] {p.get('dieu_number','')} "
               f"— {str(p.get('dieu_title',''))[:50]}  (score={h.score:.4f})")

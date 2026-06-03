@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 import numpy as np
 
@@ -54,6 +55,31 @@ def _strip_code_fences(raw: str) -> str:
     return raw.strip()
 
 
+def _retry(fn, *, attempts: int = 6, base: float = 8.0):
+    """
+    Call fn(); on transient Gemini errors (429 RESOURCE_EXHAUSTED, 5xx) retry
+    with exponential backoff (capped 60s). Non-transient errors propagate.
+    """
+    last = None
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception as e:  # google.genai errors are not all subclasses we can import cheaply
+            msg = str(e)
+            code = getattr(e, "code", None) or getattr(e, "status_code", None)
+            transient = (
+                "429" in msg or "RESOURCE_EXHAUSTED" in msg
+                or "503" in msg or "500" in msg or "UNAVAILABLE" in msg
+                or (isinstance(code, int) and code in (429, 500, 503))
+            )
+            if not transient:
+                raise
+            last = e
+            time.sleep(min(base * (2 ** i), 60))
+    if last:
+        raise last
+
+
 # ---------------------------------------------------------------------------
 # Query rewriter
 # ---------------------------------------------------------------------------
@@ -80,7 +106,7 @@ class VertexQueryRewriter(QueryRewriter):
             contents.append(
                 types.Content(role=grole, parts=[types.Part(text=m["content"])])
             )
-        resp = self._llm.models.generate_content(
+        resp = _retry(lambda: self._llm.models.generate_content(
             model=self.config.vllm.model,
             contents=contents,
             config=types.GenerateContentConfig(
@@ -88,7 +114,7 @@ class VertexQueryRewriter(QueryRewriter):
                 temperature=0.1,
                 max_output_tokens=512,
             ),
-        )
+        ))
         return getattr(resp, "text", None) or ""
 
 
@@ -109,7 +135,7 @@ class VertexGenerator(LegalGenerator):
         from google.genai import types  # lazy
 
         gen_cfg = self.config.generator
-        resp = self._llm.models.generate_content(
+        resp = _retry(lambda: self._llm.models.generate_content(
             model=self.config.vllm.model,
             contents=user,
             config=types.GenerateContentConfig(
@@ -118,7 +144,7 @@ class VertexGenerator(LegalGenerator):
                 max_output_tokens=gen_cfg.max_tokens,
                 top_p=gen_cfg.top_p,
             ),
-        )
+        ))
         return getattr(resp, "text", None) or ""
 
 
@@ -147,14 +173,14 @@ class VertexEmbedder(LegalEmbedder):
     def _embed(self, texts: list[str], task_type: str) -> list[list[float]]:
         from google.genai import types  # lazy
 
-        resp = self.genai_client.models.embed_content(
+        resp = _retry(lambda: self.genai_client.models.embed_content(
             model=self.config.models.embedder,
             contents=texts,
             config=types.EmbedContentConfig(
                 task_type=task_type,
                 output_dimensionality=self.dim,
             ),
-        )
+        ))
         return [list(e.values) for e in resp.embeddings]
 
     def _encode_query(self, text: str) -> np.ndarray:
@@ -214,14 +240,14 @@ class VertexReranker(LegalReranker):
                 f"{c.get('content', '')[:_RERANK_SNIPPET]}"
             )
         try:
-            resp = self.genai_client.models.generate_content(
+            resp = _retry(lambda: self.genai_client.models.generate_content(
                 model=self.config.models.reranker,
                 contents="\n".join(blocks),
                 config=types.GenerateContentConfig(
                     system_instruction=_RERANK_SYSTEM,
                     temperature=self.config.reranker.temperature,
                 ),
-            )
+            ))
             return self._parse_scores(getattr(resp, "text", None) or "")
         except Exception:
             return None

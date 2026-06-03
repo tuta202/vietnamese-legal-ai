@@ -15,6 +15,7 @@ import logging
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 # Ensure legal-ai/ is importable as a package root when run as script
@@ -66,8 +67,9 @@ class PipelineState:
 
 class _MockQdrant:
     """Drop-in no-op Qdrant client for offline mode."""
-    def search(self, collection_name: str, query_vector: list, limit: int) -> list:
-        return []
+    def query_points(self, collection_name: str, query: list, limit: int,
+                     with_payload: bool = True):
+        return SimpleNamespace(points=[])
     def retrieve(self, collection_name: str, ids: list, with_payload: bool) -> list:
         return []
 
@@ -137,22 +139,31 @@ class LegalAIPipeline:
         # BM25
         bm25_hits = self._bm25.search(query, top_k=self.config.retrieval.top_k_bm25)
 
-        # Dense (rewritten query)
+        # Dense (rewritten query) — returns (hits, payload-by-chunk_id)
         q_vec       = self._embedder.embed_query(query)
-        dense_hits  = self._dense_search(q_vec)
+        dense_hits, dense_payloads = self._dense_search(q_vec)
 
         # Dense (topic description) if non-trivial
         rankings = [bm25_hits, dense_hits]
         td = state.topic_description
         if td and td != query:
             td_vec  = self._embedder.embed_query(td)
-            td_hits = self._dense_search(td_vec)
+            td_hits, td_payloads = self._dense_search(td_vec)
             rankings.append(td_hits)
+            dense_payloads = {**dense_payloads, **td_payloads}
 
         fused = rrf_fusion(rankings, k=self.config.retrieval.rrf_k)
-        state.fused_results = self._resolve_payloads(
-            fused[: self.config.retrieval.top_k_fusion]
+        results = self._resolve_payloads(
+            fused[: self.config.retrieval.top_k_fusion], dense_payloads
         )
+
+        # Fallback: if nothing resolved (e.g. rewritten query missed), retry BM25
+        # on the original question so we never produce an empty-context answer.
+        if not results:
+            fb = self._bm25.search(state.question, top_k=self.config.retrieval.top_k_fusion)
+            results = self._resolve_payloads(fb, {})
+
+        state.fused_results = results
         log.debug("Retrieved %d candidates", len(state.fused_results))
         return state
 
@@ -268,29 +279,82 @@ class LegalAIPipeline:
             return QdrantClient(url=q.url, api_key=q.api_key)
         return QdrantClient(q.host, port=q.port)
 
-    def _dense_search(self, vector) -> list[tuple[str, float]]:
-        vec_list = vector.tolist() if hasattr(vector, "tolist") else list(vector)
-        results  = self._qdrant.search(
-            collection_name=self.config.qdrant.collection,
-            query_vector=vec_list,
-            limit=self.config.retrieval.top_k_dense,
-        )
-        out = []
-        for r in results:
-            if hasattr(r, "id") and hasattr(r, "score"):
-                out.append((str(r.id), float(r.score)))
-            elif isinstance(r, dict):
-                out.append((str(r["id"]), float(r.get("score", 0.0))))
-        return out
+    def _dense_search(self, vector) -> tuple[list[tuple[str, float]], dict[str, dict]]:
+        """
+        Dense search via Qdrant query_points.
 
-    def _resolve_payloads(self, fused: list[tuple[str, float]]) -> list[dict]:
+        Returns (hits, payloads):
+          • hits     = [(chunk_id, score), ...] keyed by the RAW chunk_id from the
+            Qdrant payload — so fusion + BM25 payload lookup line up (this is the
+            fix for dense-only hits previously keyed by the dashed point UUID).
+          • payloads = {chunk_id: qdrant_payload} for resolving hits not in BM25.
+        """
+        vec_list = vector.tolist() if hasattr(vector, "tolist") else list(vector)
+        resp = self._qdrant.query_points(
+            collection_name=self.config.qdrant.collection,
+            query=vec_list,
+            limit=self.config.retrieval.top_k_dense,
+            with_payload=True,
+        )
+        points = getattr(resp, "points", resp)
+
+        hits: list[tuple[str, float]] = []
+        payloads: dict[str, dict] = {}
+        for r in points:
+            payload = getattr(r, "payload", None)
+            if payload is None and isinstance(r, dict):
+                payload = r.get("payload")
+            payload = payload or {}
+
+            rid = getattr(r, "id", None)
+            if rid is None and isinstance(r, dict):
+                rid = r.get("id")
+            chunk_id = payload.get("chunk_id") or str(rid)
+
+            score = getattr(r, "score", None)
+            if score is None and isinstance(r, dict):
+                score = r.get("score", 0.0)
+
+            hits.append((chunk_id, float(score or 0.0)))
+            if payload:
+                payloads[chunk_id] = payload
+        return hits, payloads
+
+    def _resolve_payloads(
+        self,
+        fused: list[tuple[str, float]],
+        dense_payloads: dict[str, dict] | None = None,
+    ) -> list[dict]:
+        dense_payloads = dense_payloads or {}
         results = []
         for chunk_id, rrf_score in fused:
             payload = self._bm25.get_payload(chunk_id)
             if payload is None:
-                payload = {"chunk_id": chunk_id}
+                qp = dense_payloads.get(chunk_id)
+                payload = self._normalize_payload(qp, chunk_id) if qp else {"chunk_id": chunk_id}
             results.append({**payload, "rrf_score": rrf_score})
         return results
+
+    @staticmethod
+    def _normalize_payload(qp: dict, chunk_id: str) -> dict:
+        """Qdrant payload → article dict shape with submission strings guaranteed."""
+        law_id   = qp.get("law_id", "")
+        law_type = qp.get("law_type", "")
+        law_name = qp.get("law_name", "")
+        dieu_number = qp.get("dieu_number") or qp.get("article_number", "")
+        dieu_title  = qp.get("dieu_title")  or qp.get("article_title", "")
+        return {
+            "chunk_id":             qp.get("chunk_id", chunk_id),
+            "law_id":               law_id,
+            "law_type":             law_type,
+            "law_name":             law_name,
+            "dieu_number":          dieu_number,
+            "dieu_title":           dieu_title,
+            "content":              qp.get("content", ""),
+            "relevant_doc_str":     qp.get("relevant_doc_str") or f"{law_id}|{law_type} {law_name}",
+            "relevant_article_str": qp.get("relevant_article_str")
+                                    or f"{law_id}|{law_type} {law_name}|{dieu_number}",
+        }
 
 
 # ---------------------------------------------------------------------------

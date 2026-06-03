@@ -303,7 +303,9 @@ class TestHybridSearchWithMocks:
             pt.id   = cid
             pt.score = 1.0 - i * 0.1
             mock_points.append(pt)
-        client.search.return_value = mock_points
+        resp = MagicMock()
+        resp.points = mock_points
+        client.query_points.return_value = resp
         return client
 
     def test_search_calls_all_five_steps(self, default_config, sample_articles):
@@ -322,8 +324,8 @@ class TestHybridSearchWithMocks:
 
         # Step 1: rewriter called
         assert rewriter._client is None  # mock=True, no llm init
-        # Step 3+4: qdrant.search called (at least once for query, maybe twice for hyde)
-        assert qdrant.search.call_count >= 1
+        # Step 3+4: qdrant.query_points called (≥1 for query, maybe twice for hyde)
+        assert qdrant.query_points.call_count >= 1
         # Step 5: fusion produces list
         assert isinstance(results, list)
         assert all("rrf_score" in r for r in results)

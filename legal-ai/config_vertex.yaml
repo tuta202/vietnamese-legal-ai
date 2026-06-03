@@ -32,7 +32,8 @@ retrieval:
   top_k_dense: 20
   top_k_bm25: 20
   top_k_fusion: 20
-  top_k_rerank: 7
+  top_k_rerank: 3    # tuned: with dense retrieval fixed, top-3 maximizes F2 (recall
+                     # already saturates by rank 3; smaller k lifts precision sharply)
   rrf_k: 60
 
 generator:
