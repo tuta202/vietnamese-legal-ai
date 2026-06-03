@@ -1,3 +1,10 @@
+[RESOLVED — 2026-06-03]
+Bug đã được fix trong initial commit. Corpus.json hiện tại đã bao gồm đầy đủ
+articles "Quyền": 42 titles, Lao động=220/220, Doanh nghiệp=218/218.
+Scan report cũ ghi nhầm là "chưa fix". File này giữ lại để tham khảo lịch sử.
+---
+[NỘI DUNG CŨ BÊN DƯỚI]
+
 ========================================================================
   TIP-002-AUDIT  —  Root-cause report
 ========================================================================
