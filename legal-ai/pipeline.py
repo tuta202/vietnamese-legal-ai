@@ -92,12 +92,31 @@ class LegalAIPipeline:
         self.mock = mock
         self.config: RetrievalConfig = load_config(config_path or _DEFAULT_CFG)
 
-        self._bm25      = self._init_bm25()
-        self._embedder  = LegalEmbedder(self.config, dry_run=mock)
-        self._rewriter  = QueryRewriter(self.config, mock=mock)
-        self._reranker  = LegalReranker(self.config, mock=mock)
-        self._generator = LegalGenerator(self.config, mock=mock)
-        self._qdrant    = _MockQdrant() if mock else self._init_qdrant()
+        self._bm25 = self._init_bm25()
+        (self._embedder, self._rewriter,
+         self._reranker, self._generator) = self._make_components()
+        self._qdrant = _MockQdrant() if mock else self._init_qdrant()
+
+    def _make_components(self):
+        """Build the neural components for the configured backend (vllm | vertex_ai)."""
+        if self.config.backend == "vertex_ai":
+            # Vertex subclasses override only the model-call hook; imported here
+            # so the vLLM path never touches google-genai.
+            from vertex_backends import (
+                VertexEmbedder, VertexGenerator, VertexQueryRewriter, VertexReranker,
+            )
+            return (
+                VertexEmbedder(self.config, dry_run=self.mock),
+                VertexQueryRewriter(self.config, mock=self.mock),
+                VertexReranker(self.config, mock=self.mock),
+                VertexGenerator(self.config, mock=self.mock),
+            )
+        return (
+            LegalEmbedder(self.config, dry_run=self.mock),
+            QueryRewriter(self.config, mock=self.mock),
+            LegalReranker(self.config, mock=self.mock),
+            LegalGenerator(self.config, mock=self.mock),
+        )
 
     # ------------------------------------------------------------------
     # Step methods (LangGraph v2 node-ready)
@@ -244,7 +263,10 @@ class LegalAIPipeline:
 
     def _init_qdrant(self) -> Any:
         from qdrant_client import QdrantClient  # noqa: PLC0415
-        return QdrantClient(self.config.qdrant.host, port=self.config.qdrant.port)
+        q = self.config.qdrant
+        if q.url:   # Qdrant Cloud (Vertex backend)
+            return QdrantClient(url=q.url, api_key=q.api_key)
+        return QdrantClient(q.host, port=q.port)
 
     def _dense_search(self, vector) -> list[tuple[str, float]]:
         vec_list = vector.tolist() if hasattr(vector, "tolist") else list(vector)
@@ -277,12 +299,15 @@ class LegalAIPipeline:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="LegalAI pipeline runner")
+    parser.add_argument("--config", default=None,
+                        help="Config YAML (default: retrieval/config.yaml; "
+                             "use config_vertex.yaml for the Vertex AI backend)")
     parser.add_argument("--mock",   action="store_true", help="Run in mock mode (no GPU/Docker)")
     parser.add_argument("--input",  required=True, help="JSON file with [{id, question}, ...]")
     parser.add_argument("--output", default="results.json", help="Output results.json path")
     args = parser.parse_args()
 
-    pipeline = LegalAIPipeline(mock=args.mock)
+    pipeline = LegalAIPipeline(config_path=args.config, mock=args.mock)
     results  = pipeline.process_batch(args.input)
 
     out_path = Path(args.output)

@@ -146,17 +146,25 @@ class QueryRewriter:
         messages.append({"role": "user", "content": question})
 
         try:
-            response = self._llm.chat.completions.create(
-                model=self.config.vllm.model,
-                messages=messages,
-                temperature=0.1,
-                max_tokens=512,
-            )
-            raw = response.choices[0].message.content or ""
+            raw = self._chat_complete(messages)
             return self._parse_response(raw, question)
         except Exception:
             # Network / parse failure → fall back to original question
             return RewriteResult(rewritten_query=question, topic_description="")
+
+    # ------------------------------------------------------------------
+    # Model-call hook — overridden by Vertex subclass (only this differs)
+    # ------------------------------------------------------------------
+
+    def _chat_complete(self, messages: list[dict]) -> str:
+        """Single chat completion over `messages` (system + few-shots + user)."""
+        response = self._llm.chat.completions.create(
+            model=self.config.vllm.model,
+            messages=messages,
+            temperature=0.1,
+            max_tokens=512,
+        )
+        return response.choices[0].message.content or ""
 
     # ------------------------------------------------------------------
     # Private

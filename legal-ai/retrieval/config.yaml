@@ -1,3 +1,5 @@
+backend: vllm
+
 qdrant:
   host: localhost
   port: 6333

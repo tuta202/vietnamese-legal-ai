@@ -64,6 +64,20 @@ class LegalReranker:
         if self.mock:
             return candidates[:k]
 
+        scores = self._score(question, candidates)
+        ranked = sorted(
+            zip(scores, candidates),
+            key=lambda x: x[0],
+            reverse=True,
+        )
+        return [c for _, c in ranked[:k]]
+
+    # ------------------------------------------------------------------
+    # Scoring hook — overridden by Vertex subclass (only this differs)
+    # ------------------------------------------------------------------
+
+    def _score(self, question: str, candidates: list[dict]) -> list[float]:
+        """Relevance score per candidate (cross-encoder), aligned to input order."""
         pairs = [
             (
                 f"{_INSTRUCTION}\nQuestion: {question}",
@@ -71,11 +85,4 @@ class LegalReranker:
             )
             for c in candidates
         ]
-        scores = self.model.predict(pairs)
-
-        ranked = sorted(
-            zip(scores, candidates),
-            key=lambda x: x[0],
-            reverse=True,
-        )
-        return [c for _, c in ranked[:k]]
+        return self.model.predict(pairs)

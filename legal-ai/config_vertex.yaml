@@ -1,0 +1,42 @@
+# Vertex AI / Gemini backend — SAME schema as retrieval/config.yaml.
+# Only model names + backend differ; secrets come from env / .env (see .env.example).
+backend: vertex_ai
+
+qdrant:
+  url: ${QDRANT_URL}             # resolved from env / .env (NEVER commit secrets)
+  api_key: ${QDRANT_API_KEY}     # resolved from env / .env (NEVER commit secrets)
+  collection: legal_vn_vertex
+  vector_size: 3072
+  distance: Cosine
+
+# Chat-LLM endpoint (used by query rewriter, generator, LLM reranker).
+vllm:
+  model: gemini-2.5-flash-lite   # cheapest Gemini; $0.10/1M input tokens
+  gcp_project: ${GCP_PROJECT}    # empty → GOOGLE_API_KEY env var is used instead
+  gcp_location: us-central1
+
+models:
+  embedder: gemini-embedding-001
+  reranker: gemini-2.5-flash-lite
+
+embedding:
+  dimension: 3072                # gemini-embedding-001 max quality
+  task_type: RETRIEVAL_DOCUMENT
+  query_task_type: RETRIEVAL_QUERY
+  batch_size: 50
+
+reranker:
+  temperature: 0.0
+
+retrieval:
+  top_k_dense: 20
+  top_k_bm25: 20
+  top_k_fusion: 20
+  top_k_rerank: 7
+  rrf_k: 60
+
+generator:
+  temperature: 0.1
+  max_tokens: 2048
+  top_p: 0.9
+  max_articles: 7

@@ -67,18 +67,26 @@ class LegalGenerator:
         prompt  = self._builder.build_prompt(
             question, articles, max_articles=gen_cfg.max_articles
         )
+        return self._chat_complete(prompt["system"], prompt["user"]).strip()
 
+    # ------------------------------------------------------------------
+    # Model-call hook — overridden by Vertex subclass (only this differs)
+    # ------------------------------------------------------------------
+
+    def _chat_complete(self, system: str, user: str) -> str:
+        """Single chat completion from a system + user prompt pair."""
+        gen_cfg = self.config.generator
         response = self._llm.chat.completions.create(
             model=self.config.vllm.model,
             messages=[
-                {"role": "system", "content": prompt["system"]},
-                {"role": "user",   "content": prompt["user"]},
+                {"role": "system", "content": system},
+                {"role": "user",   "content": user},
             ],
             temperature=gen_cfg.temperature,
             max_tokens=gen_cfg.max_tokens,
             top_p=gen_cfg.top_p,
         )
-        return (response.choices[0].message.content or "").strip()
+        return response.choices[0].message.content or ""
 
     def extract_dieu_mentions(self, answer: str) -> list[str]:
         """

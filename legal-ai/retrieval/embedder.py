@@ -73,18 +73,33 @@ class LegalEmbedder:
     # Embedding
     # ------------------------------------------------------------------
 
+    @property
+    def dim(self) -> int:
+        """Embedding dimension (config-driven; 4096 for Qwen3-Embedding-8B)."""
+        return getattr(self.config.embedding, "dimension", _EMBED_DIM)
+
     def embed_query(self, text: str) -> np.ndarray:
         """Embed a single query string. Returns (dim,) float32 array."""
         if self.dry_run:
-            return np.zeros(_EMBED_DIM, dtype=np.float32)
-        formatted = self._format_query(text)
-        vec = self.model.encode(formatted, normalize_embeddings=True)
-        return np.array(vec, dtype=np.float32)
+            return np.zeros(self.dim, dtype=np.float32)
+        return self._encode_query(text)
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:
         """Embed a batch of pre-formatted document texts."""
         if self.dry_run:
-            return np.zeros((len(texts), _EMBED_DIM), dtype=np.float32)
+            return np.zeros((len(texts), self.dim), dtype=np.float32)
+        return self._encode_documents(texts)
+
+    # ------------------------------------------------------------------
+    # Encoding hooks — overridden by Vertex subclass (only these differ)
+    # ------------------------------------------------------------------
+
+    def _encode_query(self, text: str) -> np.ndarray:
+        formatted = self._format_query(text)
+        vec = self.model.encode(formatted, normalize_embeddings=True)
+        return np.array(vec, dtype=np.float32)
+
+    def _encode_documents(self, texts: list[str]) -> np.ndarray:
         vecs = self.model.encode(texts, normalize_embeddings=True, batch_size=_BATCH_SIZE)
         return np.array(vecs, dtype=np.float32)
 
