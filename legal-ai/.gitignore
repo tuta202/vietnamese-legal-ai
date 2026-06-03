@@ -1,0 +1,17 @@
+# Secrets
+.env
+
+# Eval / pipeline output
+results*.json
+submission/
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
