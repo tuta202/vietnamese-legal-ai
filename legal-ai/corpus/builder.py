@@ -6,6 +6,7 @@ CLI:
     python corpus/builder.py
 """
 import json
+import logging
 import sys
 import time
 from dataclasses import asdict
@@ -17,6 +18,8 @@ _ROOT = _HERE.parent
 sys.path.insert(0, str(_HERE))
 
 from parser import Article, LegalTextParser
+
+log = logging.getLogger(__name__)
 
 CONFIG_PATH = _ROOT / "crawler" / "crawler_config.json"
 RAW_DIR = _ROOT / "corpus" / "data" / "raw"
@@ -65,18 +68,15 @@ class CorpusBuilder:
             raw_file = RAW_DIR / f"{safe_id}.txt"
 
             if not raw_file.exists():
-                print(f"  [WARN] Missing raw file: {raw_file.name}", flush=True)
+                log.warning("Missing raw file: %s", raw_file.name)
                 continue
 
             raw_text = raw_file.read_text(encoding="utf-8")
             parsed = self._parser.parse(raw_text, entry)
             self._articles.extend(parsed)
 
-            print(
-                f"  {entry['id']:<22}  parsed={len(parsed):>4}  "
-                f"({raw_file.stat().st_size // 1024}KB)",
-                flush=True,
-            )
+            log.info("%-22s parsed=%4d (%dKB)",
+                     entry["id"], len(parsed), raw_file.stat().st_size // 1024)
 
         return self._articles
 

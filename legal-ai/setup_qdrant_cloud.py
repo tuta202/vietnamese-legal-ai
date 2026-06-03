@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -28,21 +27,8 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from retrieval.config import RetrievalConfig, load_config
+from retrieval.config import RetrievalConfig, load_config, validate_config
 from vertex_backends import VertexEmbedder, VertexQueryRewriter
-
-
-def _validate_config(config: RetrievalConfig) -> list[str]:
-    errors: list[str] = []
-    if not config.qdrant.url:
-        errors.append("qdrant.url is empty — set QDRANT_URL in .env")
-    if not config.qdrant.api_key:
-        errors.append("qdrant.api_key is empty — set QDRANT_API_KEY in .env")
-    if not config.vllm.gcp_project and not os.environ.get("GOOGLE_API_KEY"):
-        errors.append(
-            "No GCP auth: set GCP_PROJECT (Vertex/ADC) OR GOOGLE_API_KEY in .env"
-        )
-    return errors
 
 
 def _qdrant_client(config: RetrievalConfig):
@@ -142,7 +128,7 @@ def main() -> None:
 
     # 1. Validate config
     print("\n[1/6] Validating config…")
-    errors = _validate_config(config)
+    errors = validate_config(config)
     if errors:
         for e in errors:
             print(f"  ✗ {e}")

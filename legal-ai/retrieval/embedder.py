@@ -6,6 +6,7 @@ Model is loaded on first call to embed_query() / embed_corpus().
 """
 from __future__ import annotations
 
+import logging
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,11 +18,13 @@ from retrieval.config import RetrievalConfig, load_config
 if TYPE_CHECKING:
     pass  # qdrant_client imported lazily below
 
+log = logging.getLogger(__name__)
+
 _EMBED_DIM = 4096   # Qwen3-Embedding-8B output dimension
 _EMBED_INSTRUCTION = (
     "Tìm kiếm điều luật pháp lý Việt Nam liên quan đến câu hỏi sau"
 )
-_BATCH_SIZE = 32
+_BATCH_SIZE = 32    # default; overridden by config.embedding.batch_size
 
 
 class LegalEmbedder:
@@ -100,7 +103,8 @@ class LegalEmbedder:
         return np.array(vec, dtype=np.float32)
 
     def _encode_documents(self, texts: list[str]) -> np.ndarray:
-        vecs = self.model.encode(texts, normalize_embeddings=True, batch_size=_BATCH_SIZE)
+        bs = getattr(self.config.embedding, "batch_size", _BATCH_SIZE)
+        vecs = self.model.encode(texts, normalize_embeddings=True, batch_size=bs)
         return np.array(vecs, dtype=np.float32)
 
     # ------------------------------------------------------------------
@@ -118,7 +122,7 @@ class LegalEmbedder:
         Returns: number of points upserted.
         """
         if self.dry_run:
-            print(f"  [dry_run] Would embed and upsert {len(articles)} articles")
+            log.info("[dry_run] would embed and upsert %d articles", len(articles))
             return len(articles)
 
         try:
@@ -126,9 +130,10 @@ class LegalEmbedder:
         except ImportError as e:
             raise RuntimeError("qdrant_client not installed") from e
 
+        batch_size = getattr(self.config.embedding, "batch_size", _BATCH_SIZE)
         upserted = 0
-        for i in range(0, len(articles), _BATCH_SIZE):
-            batch = articles[i : i + _BATCH_SIZE]
+        for i in range(0, len(articles), batch_size):
+            batch = articles[i : i + batch_size]
             texts = [self._format_document(a) for a in batch]
             vectors = self.embed_documents(texts)
 
@@ -159,7 +164,6 @@ class LegalEmbedder:
                 wait=True,
             )
             upserted += len(points)
-            print(f"  Upserted {upserted}/{len(articles)}", end="\r", flush=True)
+            log.info("Upserted %d/%d", upserted, len(articles))
 
-        print()
         return upserted

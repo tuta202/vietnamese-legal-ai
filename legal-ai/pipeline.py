@@ -24,9 +24,9 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from generator.llm_generator import LegalGenerator
-from generator.prompt_builder import PromptBuilder
+from generator.prompt_builder import PromptBuilder, _DISCLAIMER
 from retrieval.bm25_index import BM25Index
-from retrieval.config import RetrievalConfig, load_config
+from retrieval.config import RetrievalConfig, load_config, validate_config
 from retrieval.embedder import LegalEmbedder
 from retrieval.hybrid_search import rrf_fusion
 from retrieval.query_rewriter import QueryRewriter
@@ -93,6 +93,15 @@ class LegalAIPipeline:
     ) -> None:
         self.mock = mock
         self.config: RetrievalConfig = load_config(config_path or _DEFAULT_CFG)
+
+        # Fail fast on a real run with an incomplete config (skip in mock).
+        if not mock:
+            problems = validate_config(self.config)
+            if problems:
+                raise ValueError(
+                    f"Invalid config for backend '{self.config.backend}': "
+                    + "; ".join(problems)
+                )
 
         self._bm25 = self._init_bm25()
         (self._embedder, self._rewriter,
@@ -216,20 +225,35 @@ class LegalAIPipeline:
     # ------------------------------------------------------------------
 
     def process_question(self, q_id: int | str, question: str) -> dict:
-        """Run the full pipeline for a single question. Returns submission dict."""
-        state = PipelineState(question_id=q_id, question=question)
-        state = self.step_rewrite(state)
-        state = self.step_retrieve(state)
-        state = self.step_rerank(state)
-        state = self.step_generate(state)
-        state = self.step_format(state)
+        """
+        Run the full pipeline for a single question. Returns a submission dict.
 
-        # Self-validate
-        mentions = self._generator.extract_dieu_mentions(state.answer)
-        if not mentions:
-            log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
+        Failures are isolated: any exception is logged and a well-formed (5-field)
+        fallback entry is returned so one bad question never aborts the batch.
+        """
+        try:
+            state = PipelineState(question_id=q_id, question=question)
+            state = self.step_rewrite(state)
+            state = self.step_retrieve(state)
+            state = self.step_rerank(state)
+            state = self.step_generate(state)
+            state = self.step_format(state)
 
-        return state.submission_entry
+            # Self-validate
+            mentions = self._generator.extract_dieu_mentions(state.answer)
+            if not mentions:
+                log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
+
+            return state.submission_entry
+        except Exception:
+            log.exception("Q%s failed — emitting fallback entry", q_id)
+            return {
+                "id":                q_id,
+                "question":          question,
+                "answer":            _DISCLAIMER,
+                "relevant_docs":     [],
+                "relevant_articles": [],
+            }
 
     def process_questions(self, questions: list[dict]) -> list[dict]:
         """Process a list of {id, question} dicts."""

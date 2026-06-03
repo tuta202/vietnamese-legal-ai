@@ -1,7 +1,4 @@
+# Vertex AI / Gemini backend (backend: vertex_ai). No GPU needed.
+-r requirements.txt
 google-genai>=1.0.0
 google-auth>=2.20.0
-qdrant-client>=1.12   # pipeline uses query_points (search() was removed in 1.12)
-pyyaml>=6.0
-numpy>=1.24
-rank-bm25>=0.2.2
-pytest>=7.0

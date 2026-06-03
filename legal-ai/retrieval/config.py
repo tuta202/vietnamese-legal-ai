@@ -165,3 +165,28 @@ def load_config(path: Path | str = _DEFAULT_CONFIG_PATH) -> RetrievalConfig:
             setattr(cfg, attr, parsed)
 
     return cfg
+
+
+def validate_config(cfg: RetrievalConfig) -> list[str]:
+    """
+    Return a list of human-readable problems with a config for a real (non-mock)
+    run; empty list means OK. Used for fail-fast before any API call.
+    """
+    errors: list[str] = []
+    if cfg.backend == "vertex_ai":
+        if not cfg.qdrant.url:
+            errors.append("qdrant.url is empty — set QDRANT_URL in .env")
+        if not cfg.qdrant.api_key:
+            errors.append("qdrant.api_key is empty — set QDRANT_API_KEY in .env")
+        if not cfg.vllm.gcp_project and not os.environ.get("GOOGLE_API_KEY"):
+            errors.append(
+                "no GCP auth — set GCP_PROJECT (Vertex/ADC) or GOOGLE_API_KEY in .env"
+            )
+    elif cfg.backend == "vllm":
+        if not cfg.vllm.base_url:
+            errors.append("vllm.base_url is empty")
+        if not cfg.qdrant.host:
+            errors.append("qdrant.host is empty")
+    else:
+        errors.append(f"unknown backend '{cfg.backend}' (expected 'vllm' or 'vertex_ai')")
+    return errors
