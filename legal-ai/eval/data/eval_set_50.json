@@ -1,0 +1,632 @@
+[
+  {
+    "id": 1,
+    "question": "Các cơ sở ươm tạo và khu làm việc chung được hưởng những chính sách hỗ trợ nào về thuế và đất đai?",
+    "expected_articles": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 12"
+    ],
+    "expected_docs": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_001"]
+  },
+  {
+    "id": 2,
+    "question": "Đối tượng nào được tham gia khóa đào tạo trực tiếp về khởi sự kinh doanh dành cho doanh nghiệp nhỏ và vừa?",
+    "expected_articles": [
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 14"
+    ],
+    "expected_docs": [
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_002"]
+  },
+  {
+    "id": 3,
+    "question": "Khi công ty nợ thuế, cơ quan thuế có thể áp dụng những biện pháp cưỡng chế nào?",
+    "expected_articles": [
+      "38/2019/QH14|Luật Quản lý thuế|Điều 125"
+    ],
+    "expected_docs": [
+      "38/2019/QH14|Luật Quản lý thuế"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_003"]
+  },
+  {
+    "id": 4,
+    "question": "Công ty thuê lại lao động có bị phạt nếu không hướng dẫn cho người lao động thuê lại biết về nội quy lao động không?",
+    "expected_articles": [
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng|Điều 13"
+    ],
+    "expected_docs": [
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_004"]
+  },
+  {
+    "id": 5,
+    "question": "Hóa đơn khởi tạo từ máy tính tiền kết nối với cơ quan thuế có bắt buộc phải có chữ ký số không?",
+    "expected_articles": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ|Điều 11"
+    ],
+    "expected_docs": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_005"]
+  },
+  {
+    "id": 6,
+    "question": "Khi sử dụng biên lai điện tử, công ty phải tuân thủ định dạng dữ liệu nào?",
+    "expected_articles": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ|Điều 33"
+    ],
+    "expected_docs": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_006"]
+  },
+  {
+    "id": 7,
+    "question": "Nếu công ty khai sai căn cứ tính thuế dẫn đến thiếu số tiền thuế phải nộp nhưng mọi nghiệp vụ đều có hóa đơn chứng từ đầy đủ thì bị xử phạt thế nào?",
+    "expected_articles": [
+      "125/2020/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính về thuế, hóa đơn|Điều 16"
+    ],
+    "expected_docs": [
+      "125/2020/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính về thuế, hóa đơn"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_007"]
+  },
+  {
+    "id": 8,
+    "question": "Trường hợp nào công ty được xem xét xóa nợ tiền thuế, tiền chậm nộp và tiền phạt?",
+    "expected_articles": [
+      "38/2019/QH14|Luật Quản lý thuế|Điều 85"
+    ],
+    "expected_docs": [
+      "38/2019/QH14|Luật Quản lý thuế"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_008"]
+  },
+  {
+    "id": 9,
+    "question": "Khi hạch toán tiền gửi ngân hàng, công ty cần căn cứ vào những loại chứng từ nào?",
+    "expected_articles": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp|Điều 13"
+    ],
+    "expected_docs": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_009"]
+  },
+  {
+    "id": 10,
+    "question": "Quỹ khen thưởng và quỹ phúc lợi của công ty được trích lập từ nguồn nào?",
+    "expected_articles": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp|Điều 61"
+    ],
+    "expected_docs": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_010"]
+  },
+  {
+    "id": 11,
+    "question": "Khi viết sai chứng từ kế toán thì công ty phải xử lý như thế nào cho đúng quy định?",
+    "expected_articles": [
+      "88/2015/QH13|Luật Kế toán|Điều 18"
+    ],
+    "expected_docs": [
+      "88/2015/QH13|Luật Kế toán"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_011"]
+  },
+  {
+    "id": 12,
+    "question": "Khi xây dựng hoặc sửa đổi quy chế dân chủ ở cơ sở, công ty phải tham khảo ý kiến của những đối tượng nào?",
+    "expected_articles": [
+      "10/2022/QH15|Luật Thực hiện dân chủ ở cơ sở|Điều 65"
+    ],
+    "expected_docs": [
+      "10/2022/QH15|Luật Thực hiện dân chủ ở cơ sở"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_012"]
+  },
+  {
+    "id": 13,
+    "question": "Hộ kinh doanh cần gửi hồ sơ đăng ký tạm ngừng kinh doanh trước bao nhiêu ngày?",
+    "expected_articles": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp|Điều 91"
+    ],
+    "expected_docs": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_013"]
+  },
+  {
+    "id": 14,
+    "question": "Công ty được quyền bắt đầu hoạt động kinh doanh từ thời điểm nào sau khi được cấp Giấy chứng nhận đăng ký doanh nghiệp?",
+    "expected_articles": [
+      "59/2020/QH14|Luật Doanh nghiệp|Điều 27"
+    ],
+    "expected_docs": [
+      "59/2020/QH14|Luật Doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_014"]
+  },
+  {
+    "id": 15,
+    "question": "Khi muốn tạm ngừng kinh doanh, công ty phải gửi hồ sơ thông báo đến Cơ quan đăng ký kinh doanh trước bao nhiêu ngày?",
+    "expected_articles": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp|Điều 66"
+    ],
+    "expected_docs": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_015"]
+  },
+  {
+    "id": 16,
+    "question": "Khi muốn đăng ký hộ kinh doanh, chủ hộ có thể lựa chọn những phương thức đăng ký nào?",
+    "expected_articles": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp|Điều 87"
+    ],
+    "expected_docs": [
+      "01/2021/NĐ-CP|Nghị định về đăng ký doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_016"]
+  },
+  {
+    "id": 17,
+    "question": "Khi bán hàng từ xa, công ty cần cung cấp những thông tin gì cho người tiêu dùng?",
+    "expected_articles": [
+      "19/2023/QH15|Luật Bảo vệ quyền lợi người tiêu dùng|Điều 37"
+    ],
+    "expected_docs": [
+      "19/2023/QH15|Luật Bảo vệ quyền lợi người tiêu dùng"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_017"]
+  },
+  {
+    "id": 18,
+    "question": "Số tiền mà bên bảo lãnh trả nợ thay cho doanh nghiệp bao gồm những khoản nào?",
+    "expected_articles": [
+      "91/2015/QH13|Bộ luật Dân sự|Điều 336"
+    ],
+    "expected_docs": [
+      "91/2015/QH13|Bộ luật Dân sự"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_018"]
+  },
+  {
+    "id": 19,
+    "question": "Trước khi thực hiện nhượng quyền thương mại thì công ty phải đăng ký với cơ quan nào?",
+    "expected_articles": [
+      "36/2005/QH11|Luật Thương mại|Điều 291"
+    ],
+    "expected_docs": [
+      "36/2005/QH11|Luật Thương mại"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_019"]
+  },
+  {
+    "id": 20,
+    "question": "Trong trường hợp hợp đồng không ghi rõ thời hạn hoàn thành dịch vụ thì công ty phải căn cứ vào đâu để xác định thời hạn này?",
+    "expected_articles": [
+      "36/2005/QH11|Luật Thương mại|Điều 80"
+    ],
+    "expected_docs": [
+      "36/2005/QH11|Luật Thương mại"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_020"]
+  },
+  {
+    "id": 21,
+    "question": "Công ty phải làm gì nếu không đồng ý với kiến nghị về nghĩa vụ thuế của Kiểm toán nhà nước khi họ trực tiếp kiểm toán doanh nghiệp?",
+    "expected_articles": [
+      "81/2015/QH13|Luật Kiểm toán nhà nước|Điều 69"
+    ],
+    "expected_docs": [
+      "81/2015/QH13|Luật Kiểm toán nhà nước"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_021"]
+  },
+  {
+    "id": 22,
+    "question": "Khi công ty nộp thuế qua chuyển khoản thì ngày nào được tính là ngày đã nộp thuế?",
+    "expected_articles": [
+      "38/2019/QH14|Luật Quản lý thuế|Điều 58"
+    ],
+    "expected_docs": [
+      "38/2019/QH14|Luật Quản lý thuế"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_022"]
+  },
+  {
+    "id": 23,
+    "question": "Doanh nghiệp nhỏ và vừa khởi nghiệp sáng tạo cần đảm bảo tỷ lệ vốn chủ sở hữu tối thiểu bao nhiêu khi vay vốn từ Quỹ phát triển doanh nghiệp nhỏ và vừa?",
+    "expected_articles": [
+      "39/2019/NĐ-CP|Nghị định về tổ chức và hoạt động của Quỹ phát triển doanh nghiệp nhỏ và vừa|Điều 16"
+    ],
+    "expected_docs": [
+      "39/2019/NĐ-CP|Nghị định về tổ chức và hoạt động của Quỹ phát triển doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_023"]
+  },
+  {
+    "id": 24,
+    "question": "Công ty thực hiện giao dịch bảo hiểm xã hội bằng hình thức điện tử thì có giá trị pháp lý tương đương bản giấy không?",
+    "expected_articles": [
+      "166/2016/NĐ-CP|Nghị định quy định về giao dịch điện tử trong lĩnh vực bảo hiểm xã hội, bảo hiểm y tế, bảo hiểm thất nghiệp|Điều 7"
+    ],
+    "expected_docs": [
+      "166/2016/NĐ-CP|Nghị định quy định về giao dịch điện tử trong lĩnh vực bảo hiểm xã hội, bảo hiểm y tế, bảo hiểm thất nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_024"]
+  },
+  {
+    "id": 25,
+    "question": "Nhân viên nữ mang thai được nghỉ đi khám thai tối đa bao nhiêu lần và mỗi lần bao nhiêu ngày?",
+    "expected_articles": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội|Điều 52"
+    ],
+    "expected_docs": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_025"]
+  },
+  {
+    "id": 26,
+    "question": "Hồ sơ đề nghị hưởng lương hưu đối với người đang tham gia bảo hiểm xã hội bắt buộc gồm những giấy tờ gì?",
+    "expected_articles": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội|Điều 102"
+    ],
+    "expected_docs": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_026"]
+  },
+  {
+    "id": 27,
+    "question": "Những ngày lễ, tết nào trong năm mà nhân viên công ty được nghỉ làm việc và hưởng nguyên lương?",
+    "expected_articles": [
+      "45/2019/QH14|Bộ luật Lao động|Điều 112"
+    ],
+    "expected_docs": [
+      "45/2019/QH14|Bộ luật Lao động"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_027"]
+  },
+  {
+    "id": 28,
+    "question": "Khi công ty xử lý dữ liệu cá nhân của khách hàng phục vụ cho việc vận hành thử nghiệm thuật toán trí tuệ nhân tạo, công ty có cần lập hồ sơ đánh giá tác động không và phải lưu giữ hồ sơ này tại doanh nghiệp như thế nào?",
+    "expected_articles": [
+      "13/2023/NĐ-CP|Nghị định Bảo vệ dữ liệu cá nhân|Điều 9",
+      "13/2023/NĐ-CP|Nghị định Bảo vệ dữ liệu cá nhân|Điều 39"
+    ],
+    "expected_docs": [
+      "13/2023/NĐ-CP|Nghị định Bảo vệ dữ liệu cá nhân"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_028_1", "art_028_2"]
+  },
+  {
+    "id": 29,
+    "question": "Khi thành viên góp vốn bằng tài sản không đăng ký quyền sở hữu vào công ty, biên bản giao nhận tài sản cần có những nội dung chính nào và ai là người đại diện công ty ký tên vào biên bản đó?",
+    "expected_articles": [
+      "59/2020/QH14|Luật Doanh nghiệp|Điều 35"
+    ],
+    "expected_docs": [
+      "59/2020/QH14|Luật Doanh nghiệp"
+    ],
+    "strategy": "single",
+    "source_articles": ["art_029"]
+  },
+  {
+    "id": 30,
+    "question": "Khi công ty thực hiện khấu trừ thuế thu nhập cá nhân cho nhân viên bằng chứng từ điện tử, thời điểm lập chứng từ này là khi nào và công ty phải chuyển dữ liệu cho cơ quan thuế ra sao?",
+    "expected_articles": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ|Điều 31",
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ|Điều 32"
+    ],
+    "expected_docs": [
+      "123/2020/NĐ-CP|Nghị định quy định về hóa đơn, chứng từ"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_030_1", "art_030_2"]
+  },
+  {
+    "id": 31,
+    "question": "Khi công ty thuê khoán một nhà xưởng nhưng trong hợp đồng không ghi rõ thời hạn thuê thì thời hạn này được xác định thế nào và lúc bàn giao tài sản cần làm những thủ tục gì?",
+    "expected_articles": [
+      "91/2015/QH13|Bộ luật Dân sự|Điều 474",
+      "91/2015/QH13|Bộ luật Dân sự|Điều 483"
+    ],
+    "expected_docs": [
+      "91/2015/QH13|Bộ luật Dân sự"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_031_1", "art_031_2"]
+  },
+  {
+    "id": 32,
+    "question": "Nếu công ty muốn xây dựng hệ thống hạ tầng công nghệ số phục vụ phát triển sản phẩm công nghệ chuỗi khối (blockchain) và dữ liệu lớn, thì Nhà nước có những chính sách khuyến khích, hỗ trợ đầu tư cụ thể nào đối với hạ tầng quốc gia và khu công nghệ số?",
+    "expected_articles": [
+      "71/2025/QH15|Luật Công nghiệp công nghệ số|Điều 45",
+      "86/2015/QH13|Luật Khoa học và Công nghệ|Điều 48"
+    ],
+    "expected_docs": [
+      "71/2025/QH15|Luật Công nghiệp công nghệ số",
+      "86/2015/QH13|Luật Khoa học và Công nghệ"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_032_1", "art_032_2"]
+  },
+  {
+    "id": 33,
+    "question": "Trong trường hợp cơ quan bảo hiểm xã hội từ chối chi trả trợ cấp hằng tháng cho một nhân viên đủ tuổi nghỉ hưu nhưng không đủ điều kiện hưởng lương hưu, cơ quan này phải phản hồi như thế nào và có quyền yêu cầu công ty cung cấp những tài liệu gì để rà soát lại?",
+    "expected_articles": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội|Điều 102",
+      "41/2024/QH15|Luật Bảo hiểm xã hội|Điều 110"
+    ],
+    "expected_docs": [
+      "41/2024/QH15|Luật Bảo hiểm xã hội"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_033_1", "art_033_2"]
+  },
+  {
+    "id": 34,
+    "question": "Khi một nhóm cổ đông muốn yêu cầu Tòa án hủy bỏ nghị quyết Đại hội đồng cổ đông do vi phạm pháp luật, thì ai sẽ là người đại diện cho công ty để tham gia tố tụng trong vụ việc này?",
+    "expected_articles": [
+      "59/2020/QH14|Luật Doanh nghiệp|Điều 151",
+      "92/2015/QH13|Bộ luật Tố tụng dân sự|Điều 85"
+    ],
+    "expected_docs": [
+      "59/2020/QH14|Luật Doanh nghiệp",
+      "92/2015/QH13|Bộ luật Tố tụng dân sự"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_034_1", "art_034_2"]
+  },
+  {
+    "id": 35,
+    "question": "Khi đoàn kiểm tra kế toán đến làm việc tại công ty, họ có nghĩa vụ phải thực hiện những gì và công ty có quyền từ chối kiểm tra trong trường hợp nào?",
+    "expected_articles": [
+      "88/2015/QH13|Luật Kế toán|Điều 36",
+      "88/2015/QH13|Luật Kế toán|Điều 37"
+    ],
+    "expected_docs": [
+      "88/2015/QH13|Luật Kế toán"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_035_1", "art_035_2"]
+  },
+  {
+    "id": 36,
+    "question": "Công ty tôi là doanh nghiệp nhỏ và vừa đang phát triển sản phẩm khoa học công nghệ thì được ưu tiên tiếp cận những nguồn lực nào và được hỗ trợ cụ thể gì về chi phí, đào tạo?",
+    "expected_articles": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 16",
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 22"
+    ],
+    "expected_docs": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa",
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_036_1", "art_036_2"]
+  },
+  {
+    "id": 37,
+    "question": "Khi công ty cung cấp dịch vụ liên tục cho khách hàng thông qua một sự kiện bán hàng lưu động có giá trị trên 10 triệu đồng, hợp đồng cần đảm bảo những nội dung gì và khách hàng có quyền đơn phương chấm dứt hợp đồng trong thời hạn bao lâu kể từ khi nhận văn bản?",
+    "expected_articles": [
+      "19/2023/QH15|Luật Bảo vệ quyền lợi người tiêu dùng|Điều 45",
+      "19/2023/QH15|Luật Bảo vệ quyền lợi người tiêu dùng|Điều 47"
+    ],
+    "expected_docs": [
+      "19/2023/QH15|Luật Bảo vệ quyền lợi người tiêu dùng"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_037_1", "art_037_2"]
+  },
+  {
+    "id": 38,
+    "question": "Khi công ty chuẩn bị in ấn các giấy tờ giao dịch và hồ sơ tài liệu, tên doanh nghiệp cần thể hiện những thành tố nào và ai là người đại diện theo pháp luật để ký kết các văn bản này?",
+    "expected_articles": [
+      "59/2020/QH14|Luật Doanh nghiệp|Điều 12",
+      "59/2020/QH14|Luật Doanh nghiệp|Điều 37"
+    ],
+    "expected_docs": [
+      "59/2020/QH14|Luật Doanh nghiệp"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_038_1", "art_038_2"]
+  },
+  {
+    "id": 39,
+    "question": "Khi xảy ra tai nạn lao động làm chết người tại xưởng, công ty cần thực hiện khai báo khân cấp cho những cơ quan nào và sau đó phải thực hiện báo cáo định kỳ ra sao?",
+    "expected_articles": [
+      "84/2015/QH13|Luật An toàn, vệ sinh lao động|Điều 34",
+      "39/2016/NĐ-CP|Nghị định quy định chi tiết thi hành một số điều của Luật An toàn, vệ sinh lao động về hoạt động kiểm định kỹ thuật an toàn lao động, huấn luyện an toàn, vệ sinh lao động và quan trắc môi trường lao động|Điều 24"
+    ],
+    "expected_docs": [
+      "84/2015/QH13|Luật An toàn, vệ sinh lao động",
+      "39/2016/NĐ-CP|Nghị định quy định chi tiết thi hành một số điều của Luật An toàn, vệ sinh lao động về hoạt động kiểm định kỹ thuật an toàn lao động, huấn luyện an toàn, vệ sinh lao động và quan trắc môi trường lao động"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_039_1", "art_039_2"]
+  },
+  {
+    "id": 40,
+    "question": "Nếu công ty tôi muốn nhượng quyền thương mại mô hình dịch vụ logistics cho đối tác thì cần thực hiện thủ tục đăng ký với cơ quan nào và khi vận hành dịch vụ này công ty có quyền được hưởng những khoản phí nào?",
+    "expected_articles": [
+      "36/2005/QH11|Luật Thương mại|Điều 291",
+      "36/2005/QH11|Luật Thương mại|Điều 287"
+    ],
+    "expected_docs": [
+      "36/2005/QH11|Luật Thương mại"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_040_1", "art_040_2"]
+  },
+  {
+    "id": 41,
+    "question": "Nếu công ty áp dụng các nội dung trong thỏa ước lao động tập thể đã bị tuyên bố vô hiệu cho nhân viên thì phải xử lý như thế nào và rủi ro bị xử phạt hành chính ra sao?",
+    "expected_articles": [
+      "45/2019/QH14|Bộ luật Lao động|Điều 89",
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng|Điều 16"
+    ],
+    "expected_docs": [
+      "45/2019/QH14|Bộ luật Lao động",
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_041_1", "art_041_2"]
+  },
+  {
+    "id": 42,
+    "question": "Khi công ty thực hiện gia công chế biến cho đối tác, các chi phí phát sinh cho hoạt động này được tập hợp vào tài khoản nào và doanh thu từ tiền gia công đó được xác định ra sao để tính thuế thu nhập doanh nghiệp?",
+    "expected_articles": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp|Điều 88",
+      "78/2014/TT-BTC|Thông tư hướng dẫn thi hành Luật Thuế thu nhập doanh nghiệp|Điều 5"
+    ],
+    "expected_docs": [
+      "200/2014/TT-BTC|Thông tư hướng dẫn chế độ kế toán doanh nghiệp",
+      "78/2014/TT-BTC|Thông tư hướng dẫn thi hành Luật Thuế thu nhập doanh nghiệp"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_042_1", "art_042_2"]
+  },
+  {
+    "id": 43,
+    "question": "Nếu công ty nộp đơn đăng ký sáng chế nhưng bị cơ quan quản lý tạm dừng thẩm định để kiểm soát an ninh và công ty không thực hiện đăng ký theo thủ tục bảo vệ bí mật nhà nước trong thời hạn quy định, thì đơn sẽ bị xử lý thế nào và công ty có thể chủ động rút đơn này bằng cách nào?",
+    "expected_articles": [
+      "50/2005/QH11|Luật Sở hữu trí tuệ|Điều 115",
+      "50/2005/QH11|Luật Sở hữu trí tuệ|Điều 116"
+    ],
+    "expected_docs": [
+      "50/2005/QH11|Luật Sở hữu trí tuệ"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_043_1", "art_043_2"]
+  },
+  {
+    "id": 44,
+    "question": "Để thành lập doanh nghiệp cung ứng và giới thiệu lao động cho người sử dụng lao động, công ty cần đáp ứng những điều kiện gì về giấy phép và vận hành?",
+    "expected_articles": [
+      "45/2019/QH14|Bộ luật Lao động|Điều 41",
+      "45/2019/QH14|Bộ luật Lao động|Điều 54"
+    ],
+    "expected_docs": [
+      "45/2019/QH14|Bộ luật Lao động"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_044_1", "art_044_2"]
+  },
+  {
+    "id": 45,
+    "question": "Công ty tôi là doanh nghiệp nhỏ và vừa đang muốn tham gia chuỗi giá trị, vậy tôi có thể tra cứu miễn phí những thông tin gì trên Cổng thông tin quốc gia và được hỗ trợ chi phí cho những hoạt động tư vấn, đào tạo cụ thể nào?",
+    "expected_articles": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 14",
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 24"
+    ],
+    "expected_docs": [
+      "04/2017/QH14|Luật Hỗ trợ doanh nghiệp nhỏ và vừa",
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_045_1", "art_045_2"]
+  },
+  {
+    "id": 46,
+    "question": "Công ty tôi là thương nhân cho thuê máy móc, trong trường hợp hợp đồng không quy định thời điểm chuyển rủi ro và không ghi rõ cách sử dụng, thì rủi ro đối với hàng hóa được xác định chuyển giao khi nào và bên thuê có nghĩa vụ gì trong việc bảo quản, sử dụng máy móc này?",
+    "expected_articles": [
+      "36/2005/QH11|Luật Thương mại|Điều 270",
+      "36/2005/QH11|Luật Thương mại|Điều 273"
+    ],
+    "expected_docs": [
+      "36/2005/QH11|Luật Thương mại"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_046_1", "art_046_2"]
+  },
+  {
+    "id": 47,
+    "question": "Nếu công ty không đóng bảo hiểm tai nạn lao động, bệnh nghề nghiệp cho nhân viên thì khi có người bị tai nạn ngoài phạm vi doanh nghiệp hoặc mắc bệnh nghề nghiệp, công ty phải xử lý bồi thường, chi trả và báo cáo cho cơ quan nhà nước như thế nào?",
+    "expected_articles": [
+      "84/2015/QH13|Luật An toàn, vệ sinh lao động|Điều 38",
+      "84/2015/QH13|Luật An toàn, vệ sinh lao động|Điều 39"
+    ],
+    "expected_docs": [
+      "84/2015/QH13|Luật An toàn, vệ sinh lao động"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_047_1", "art_047_2"]
+  },
+  {
+    "id": 48,
+    "question": "Để được hỗ trợ đào tạo trực tuyến về quản trị doanh nghiệp cho người quản lý điều hành, công ty khởi nghiệp sáng tạo cần chứng minh điều kiện lựa chọn bằng tài liệu gì và đối tượng này được hiểu cụ thể là ai?",
+    "expected_articles": [
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 14",
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa|Điều 22"
+    ],
+    "expected_docs": [
+      "80/2021/NĐ-CP|Nghị định quy định chi tiết và hướng dẫn thi hành một số điều của Luật Hỗ trợ doanh nghiệp nhỏ và vừa"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_048_1", "art_048_2"]
+  },
+  {
+    "id": 49,
+    "question": "Một nhân viên nữ mang thai có xác nhận của bệnh viện về việc tiếp tục làm việc sẽ ảnh hưởng xấu tới thai nhi nên muốn tạm hoãn hợp đồng, đồng thời cô ấy phản ánh công ty không cho nghỉ 30 phút mỗi ngày trong thời gian hành kinh thì công ty phải xử lý yêu cầu tạm hoãn này thế nào và rủi ro pháp lý đối với việc không cho nghỉ hành kinh là gì?",
+    "expected_articles": [
+      "45/2019/QH14|Bộ luật Lao động|Điều 138",
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng|Điều 28"
+    ],
+    "expected_docs": [
+      "45/2019/QH14|Bộ luật Lao động",
+      "12/2022/NĐ-CP|Nghị định quy định xử phạt vi phạm hành chính trong lĩnh vực lao động, bảo hiểm xã hội, người lao động Việt Nam đi làm việc ở nước ngoài theo hợp đồng"
+    ],
+    "strategy": "cross",
+    "source_articles": ["art_049_1", "art_049_2"]
+  },
+  {
+    "id": 50,
+    "question": "Công ty phát hiện đối tác vi phạm hợp đồng từ 3 năm trước nhưng giờ mới muốn khởi kiện trọng tài, vậy công ty cần xử lý về thời hiệu ra sao và nếu muốn xác lập thỏa thuận trọng tài thông qua bản tự bảo vệ thì nội dung bản này cần có gì?",
+    "expected_articles": [
+      "54/2010/QH12|Luật Trọng tài thương mại|Điều 33",
+      "54/2010/QH12|Luật Trọng tài thương mại|Điều 35"
+    ],
+    "expected_docs": [
+      "54/2010/QH12|Luật Trọng tài thương mại"
+    ],
+    "strategy": "multi",
+    "source_articles": ["art_050_1", "art_050_2"]
+  }
+]
