@@ -48,6 +48,14 @@ source .venv/bin/activate
 
 ### 2. Cài dependencies
 
+Có 3 file requirements:
+
+| File | Mô tả |
+|------|-------|
+| `requirements.txt` | Thư viện dùng chung (base) |
+| `requirements_vertex.txt` | Vertex AI / Gemini backend — đã include base |
+| `requirements_vllm.txt` | vLLM / Qwen backend — đã include base |
+
 ```bash
 # Vertex AI backend (không cần GPU — khuyến nghị)
 pip install -r requirements_vertex.txt
@@ -55,6 +63,9 @@ pip install -r requirements_vertex.txt
 # vLLM / Qwen backend (cần GPU)
 pip install -r requirements_vllm.txt
 ```
+
+> `requirements_vertex.txt` và `requirements_vllm.txt` đều có dòng `-r requirements.txt` bên trong,
+> nên **không cần** chạy `pip install -r requirements.txt` riêng.
 
 ### 2. Cấu hình secrets
 
