@@ -9,6 +9,7 @@ Hỗ trợ hai backend: **Vertex AI / Gemini** (không cần GPU) và **vLLM / Q
 
 ```
 legal-ai/
+├── .venv/                   # Virtual environment (không commit)
 ├── pipeline.py              # Entry point chính
 ├── config_vertex.yaml       # Config cho Vertex AI backend
 ├── retrieval/config.yaml    # Config cho vLLM backend (default)
@@ -29,7 +30,23 @@ legal-ai/
 
 ## Cài đặt
 
-### 1. Clone và cài dependencies
+### 1. Tạo và kích hoạt virtual environment
+
+**Windows (PowerShell):**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+**Linux / macOS:**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+> Sau khi activate, dấu nhắc lệnh sẽ có tiền tố `(.venv)`. Chạy `deactivate` để thoát.
+
+### 2. Cài dependencies
 
 ```bash
 # Vertex AI backend (không cần GPU — khuyến nghị)
