@@ -8,6 +8,18 @@ submission/
 eval/data/eval_predictions.json
 eval/data/eval_results.json
 
+# HF dataset cache (multi-GB raw parquet — never commit)
+corpus/data/hf_cache/
+
+# Expanded corpus is a large rebuildable artifact (~780MB > GitHub 100MB limit) —
+# keep it local, rebuild with `python corpus/hf_ingest.py`. Baseline
+# corpus_v1_1044.json (10.6MB) stays tracked.
+corpus/data/corpus.json
+
+# Corpus build byproducts
+corpus/data/coverage_*.json
+corpus/data/coverage_*.txt
+
 # Python
 __pycache__/
 *.pyc

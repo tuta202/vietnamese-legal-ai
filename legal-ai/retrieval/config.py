@@ -67,9 +67,13 @@ class RerankerConfig:
 
 @dataclass
 class RetrievalParams:
-    top_k_dense: int = 20
-    top_k_bm25: int = 20
-    top_k_fusion: int = 20
+    # Candidate-pool defaults sized for the expanded ~113k-article corpus (was
+    # 20/20/20 when the corpus held 1044 articles). A wider net protects recall
+    # against the ~100x larger set of competing documents; the reranker still
+    # narrows the pool down to top_k_rerank for the final citations.
+    top_k_dense: int = 50
+    top_k_bm25: int = 50
+    top_k_fusion: int = 40
     top_k_rerank: int = 7
     rrf_k: int = 60
 

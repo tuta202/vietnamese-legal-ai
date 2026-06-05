@@ -251,6 +251,7 @@ Output JSON    ──► answer + relevant_docs + relevant_articles
 
 ## Xem thêm
 
+- [`docs/corpus-build-guide.md`](corpus-build-guide.md) — quy trình thu thập & xây dựng corpus (1044 → 113k Điều)
 - [`docs/gcp-setup-guide.md`](gcp-setup-guide.md) — hướng dẫn tạo GCP project, cấp quyền
 - [`docs/gcp-quick-reference.md`](gcp-quick-reference.md) — lệnh gcloud hay dùng
 - [`docs/vertex_setup_guide.md`](vertex_setup_guide.md) — setup Vertex AI + Qdrant Cloud chi tiết

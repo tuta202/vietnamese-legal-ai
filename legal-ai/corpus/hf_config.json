@@ -1,0 +1,83 @@
+{
+  "_comment": "TIP-CORPUS-001 ingest config. Filter lists grounded in real enumerated values of th1nhng0/vietnamese-legal-documents (see hf_enumerate.py). Config-driven per TIP CONSTRAINTS — no hardcoded filters in code.",
+  "source": {
+    "repo": "th1nhng0/vietnamese-legal-documents",
+    "license": "CC BY 4.0",
+    "origin": "vbpl.vn (Cổng thông tin điện tử Bộ Tư pháp)",
+    "doi": "10.57967/hf/8598"
+  },
+  "dataset_revision": "0a39ad7eae8e6c188cb225c4b1443c3b346461d8",
+  "_revision_comment": "Pinned HF commit for reproducibility — downloaders read this. Verify: clean rebuild → 113,508 articles.",
+  "cache_dir": "data/hf_cache",
+  "tiers": {
+    "A": {"enabled": true, "meta": "data/metadata.parquet",   "content": "data/content.parquet",   "content_field": "content_html", "content_is_html": true},
+    "B": {"enabled": true, "meta": "legacy/metadata.parquet", "content": "legacy/content.parquet", "content_field": "content",      "content_is_html": false}
+  },
+  "fields": {
+    "A": {"doc_code": "so_ky_hieu",   "doc_type": "loai_van_ban", "title": "title", "effect": "tinh_trang_hieu_luc", "sectors": ["linh_vuc", "nganh"]},
+    "B": {"doc_code": "document_number", "doc_type": "legal_type", "title": "title", "effect": "effect_status",       "sectors": ["legal_sectors"]}
+  },
+  "filters": {
+    "effect_keep": {
+      "A": ["Còn hiệu lực", "Hết hiệu lực một phần"],
+      "B": ["In effect"]
+    },
+    "doc_type_keep_vi": [
+      "Bộ luật", "Luật", "Pháp lệnh", "Hiến pháp",
+      "Nghị định", "Nghị quyết", "Nghị quyết liên tịch",
+      "Thông tư", "Thông tư liên tịch", "Thông tư liên bộ",
+      "Văn bản hợp nhất"
+    ],
+    "legal_type_map_en_vi": {
+      "Law": "Luật",
+      "Ordinance": "Pháp lệnh",
+      "Constitution": "Hiến pháp",
+      "Decree of Government": "Nghị định",
+      "Resolution": "Nghị quyết",
+      "Circular": "Thông tư",
+      "Joint circular": "Thông tư liên tịch",
+      "Integrated document": "Văn bản hợp nhất"
+    },
+    "exclude_code_patterns": ["HĐND", "UBND", "-HU", "-TU"],
+    "_exclude_comment": "Drop local-government documents (People's Councils HĐND / People's Committees UBND / Party committees HU/TU) — TIP requires central-level normative only.",
+    "domain_apply": {"A": true, "B": true},
+    "domain_keywords": [
+      "doanh nghiệp", "hỗ trợ doanh nghiệp", "hộ kinh doanh", "đầu tư",
+      "thuế", "phí", "lệ phí", "hóa đơn", "chứng từ",
+      "kế toán", "kiểm toán",
+      "lao động", "tiền lương", "tiền công", "việc làm", "công đoàn",
+      "an toàn, vệ sinh lao động", "an toàn vệ sinh lao động",
+      "bảo hiểm xã hội", "bảo hiểm y tế", "bảo hiểm thất nghiệp",
+      "dân sự", "hợp đồng", "giao dịch",
+      "thương mại", "nhượng quyền", "cạnh tranh", "trọng tài thương mại",
+      "sở hữu trí tuệ", "phá sản", "đấu thầu",
+      "xử phạt vi phạm hành chính", "vi phạm hành chính",
+      "đất đai", "xây dựng", "bảo vệ môi trường",
+      "khoa học và công nghệ", "công nghệ thông tin", "công nghệ số",
+      "bảo vệ quyền lợi người tiêu dùng", "người tiêu dùng",
+      "quảng cáo", "thực hiện dân chủ ở cơ sở", "bảo vệ dữ liệu cá nhân",
+      "an toàn thông tin", "thông tin mạng", "giao dịch điện tử", "thương mại điện tử",
+      "chữ ký số", "viễn thông", "ngân hàng", "tín dụng", "chứng khoán",
+      "hợp tác xã", "an toàn thực phẩm", "tiêu chuẩn", "đo lường chất lượng",
+      "business", "enterprise", "tax", "fee", "invoice",
+      "accounting", "audit", "employment", "wage", "labour", "labor",
+      "insurance", "civil", "contract", "trade", "commercial", "commerce",
+      "intellectual property", "competition", "bankruptcy",
+      "real estate", "land", "investment", "construction", "consumer"
+    ]
+  },
+  "citation": {
+    "_comment": "loai_title => '<code>|<Loại> <Trích yếu>' (matches gold examples). loai_makh_title => '<code>|<Loại> <code> <Trích yếu>' (matches thể-lệ formula).",
+    "name_variant": "loai_title",
+    "normalize_names_from_hf": true,
+    "_normalize_comment": "Override each article's law_name with the official full trích yếu from HF metadata (tier A preferred), type-prefix stripped + first letter capitalised. Fixes tier-0 abbreviations ('Hỗ trợ DNNVV') and tier-A lowercase ('Luật hỗ trợ') so relevant_docs/articles match the BTC trích yếu format. law_type is kept (more reliable per-tier)."
+  },
+  "dedup": {"prefer_tier": "A"},
+  "output": {
+    "corpus": "data/corpus.json",
+    "backup_v1": "data/corpus_v1_1044.json",
+    "sources_md": "data/SOURCES.md",
+    "drop_khoan_list": true,
+    "_drop_comment": "khoan_list duplicates content and is unused downstream (BM25 indexes dieu_title+content only). Emptying it ~halves corpus.json size."
+  }
+}

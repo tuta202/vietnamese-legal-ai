@@ -29,11 +29,20 @@ reranker:
   temperature: 0.0
 
 retrieval:
-  top_k_dense: 20
-  top_k_bm25: 20
-  top_k_fusion: 20
-  top_k_rerank: 3    # tuned: with dense retrieval fixed, top-3 maximizes F2 (recall
-                     # already saturates by rank 3; smaller k lifts precision sharply)
+  # Candidate pool widened for the ~113k-article corpus (was 20/20/20 at 1044
+  # articles). With ~100x more competing documents, the relevant article needs a
+  # wider net to survive into reranking. The Vertex reranker scores the whole
+  # pool in ONE batched LLM call, so a larger top_k_fusion is cheap.
+  # NOTE: dense retrieval only benefits once Qdrant is re-embedded with the new
+  # corpus — until then the `legal_vn_vertex` collection still holds 1044 points:
+  #   python setup_qdrant_cloud.py --config config_vertex.yaml \
+  #          --corpus corpus/data/corpus.json --force
+  top_k_dense: 50
+  top_k_bm25: 50
+  top_k_fusion: 40   # candidates sent to the (single batched) LLM reranker
+  top_k_rerank: 7    # final cited articles — fixed; prefer over-citing over
+                     # missing (recall, F2-weighted 4x). 150-sample maxes at 3
+                     # but the private test set may need more.
   rrf_k: 60
 
 generator:
