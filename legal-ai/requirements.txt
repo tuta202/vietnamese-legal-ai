@@ -1,5 +1,11 @@
-# Core runtime — shared by both backends (vLLM/Qwen and Vertex/Gemini).
+# Core runtime — shared by all backends (vLLM/Qwen, Vertex/Gemini, Garden).
 numpy>=1.24
 pyyaml>=6.0
 qdrant-client>=1.12   # pipeline uses query_points() (search() removed in 1.12)
 pytest>=7.0
+
+# Backend SDKs (imported lazily — only needed for real, non-mock runs).
+openai>=1.30.0        # OpenAI-compatible calls: local vLLM + Garden endpoints
+google-auth>=2.29.0   # GCP bearer-token auth + refresh for Garden endpoints
+google-genai>=0.3.0   # Gemini backend (vertex_ai / garden *_provider=gemini)
+tqdm>=4.66.0          # reembed.py progress bar

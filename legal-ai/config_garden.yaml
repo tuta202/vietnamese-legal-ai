@@ -1,0 +1,48 @@
+# Vertex AI Model Garden backend — PURE open-source, competition-compliant.
+# Every component (embed / rewrite / rerank / generate) runs an open-source model
+# on a Vertex AI Online Endpoint — no Gemini here. For the Gemini stack use
+# config_vertex.yaml (backend: vertex_ai). Same RetrievalConfig schema as the
+# other configs; secrets come from env / .env (see .env.example).
+#
+# Requires BOTH endpoints live: Qwen3-Embedding-8B (embed) and LLM endpoint (rewrite/rerank/generate).
+backend: garden
+
+qdrant:
+  host: localhost                # local Qdrant; leave `url` unset for local
+  port: 6333
+  collection: legal_vn_garden    # SEPARATE from legal_vn_vertex (rollback-safe)
+  vector_size: 4096              # Qwen3-Embedding-8B dimension (must == embedding.dimension)
+  distance: Cosine
+
+# Vertex AI Model Garden endpoints (OpenAI-compatible vLLM serving).
+garden:
+  embed_endpoint_id: ${GARDEN_EMBED_ENDPOINT_ID}
+  embed_model: Qwen3-Embedding-8B
+  llm_endpoint_id: ${GARDEN_LLM_ENDPOINT_ID}
+  llm_model: meta-llama/Meta-Llama-3.1-8B-Instruct
+  project_id: ${GCP_PROJECT}
+  region: us-central1
+  max_retries: 3
+  timeout: 120
+
+embedding:
+  dimension: 4096                # Qwen3-Embedding-8B (must == qdrant.vector_size)
+  task_type: RETRIEVAL_DOCUMENT
+  query_task_type: RETRIEVAL_QUERY
+  batch_size: 32
+
+reranker:
+  temperature: 0.0
+
+retrieval:
+  top_k_dense: 50
+  top_k_bm25: 50
+  top_k_fusion: 40   # candidates sent to the LLM reranker
+  top_k_rerank: 5    # final cited articles — narrowed from 7 to tune precision
+  rrf_k: 60
+
+generator:
+  temperature: 0.1
+  max_tokens: 2048
+  top_p: 0.9
+  max_articles: 7

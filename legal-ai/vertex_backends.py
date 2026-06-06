@@ -16,12 +16,14 @@ module — or constructing any class with mock/dry_run=True — never touches th
 """
 from __future__ import annotations
 
-import json
-import re
-import time
-
 import numpy as np
 
+from backends_common import (
+    RERANK_SNIPPET as _RERANK_SNIPPET,
+    RERANK_SYSTEM as _RERANK_SYSTEM,
+    parse_rerank_scores,
+    retry_transient,
+)
 from generator.llm_generator import LegalGenerator
 from retrieval.config import RetrievalConfig
 from retrieval.embedder import LegalEmbedder
@@ -48,36 +50,14 @@ def make_genai_client(config: RetrievalConfig):
     return genai.Client()
 
 
-def _strip_code_fences(raw: str) -> str:
-    raw = raw.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.MULTILINE)
-    raw = re.sub(r"```\s*$", "", raw, flags=re.MULTILINE)
-    return raw.strip()
-
-
-def _retry(fn, *, attempts: int = 6, base: float = 8.0):
+def _retry(fn):
     """
-    Call fn(); on transient Gemini errors (429 RESOURCE_EXHAUSTED, 5xx) retry
-    with exponential backoff (capped 60s). Non-transient errors propagate.
+    Retry transient Gemini errors (429 RESOURCE_EXHAUSTED, 5xx) with exponential
+    backoff. Gemini auth does not expire mid-call, so 401 is NOT retried
+    (refresh_auth=None). Tuned more patiently than the shared default for the
+    free Gemini tier's aggressive rate limiting.
     """
-    last = None
-    for i in range(attempts):
-        try:
-            return fn()
-        except Exception as e:  # google.genai errors are not all subclasses we can import cheaply
-            msg = str(e)
-            code = getattr(e, "code", None) or getattr(e, "status_code", None)
-            transient = (
-                "429" in msg or "RESOURCE_EXHAUSTED" in msg
-                or "503" in msg or "500" in msg or "UNAVAILABLE" in msg
-                or (isinstance(code, int) and code in (429, 500, 503))
-            )
-            if not transient:
-                raise
-            last = e
-            time.sleep(min(base * (2 ** i), 60))
-    if last:
-        raise last
+    return retry_transient(fn, attempts=6, base=8.0)
 
 
 # ---------------------------------------------------------------------------
@@ -196,15 +176,6 @@ class VertexEmbedder(LegalEmbedder):
 # Reranker
 # ---------------------------------------------------------------------------
 
-_RERANK_SYSTEM = (
-    "Bạn là chuyên gia pháp lý Việt Nam. Chấm điểm mức độ liên quan của từng "
-    "điều luật đối với câu hỏi, thang điểm 0 đến 10 (10 = liên quan trực tiếp "
-    "nhất). CHỈ trả về một mảng JSON, không thêm văn bản nào khác, đúng định dạng:\n"
-    '[{"index": 0, "score": 8}, {"index": 1, "score": 3}]'
-)
-_RERANK_SNIPPET = 400
-
-
 class VertexReranker(LegalReranker):
     """
     LLM-based reranker (Gemini). Overrides only the scoring hook; rerank()
@@ -252,22 +223,5 @@ class VertexReranker(LegalReranker):
         except Exception:
             return None
 
-    @staticmethod
-    def _parse_scores(raw: str) -> dict[int, float] | None:
-        cleaned = _strip_code_fences(raw)
-        m = re.search(r"\[.*\]", cleaned, flags=re.DOTALL)
-        if m:
-            cleaned = m.group(0)
-        try:
-            data = json.loads(cleaned)
-        except (json.JSONDecodeError, TypeError):
-            return None
-        if not isinstance(data, list):
-            return None
-        out: dict[int, float] = {}
-        for item in data:
-            try:
-                out[int(item["index"])] = float(item["score"])
-            except (KeyError, TypeError, ValueError):
-                continue
-        return out or None
+    # Thin back-compat delegate; the parser lives in backends_common.
+    _parse_scores = staticmethod(parse_rerank_scores)

@@ -109,7 +109,13 @@ class LegalAIPipeline:
         self._qdrant = _MockQdrant() if mock else self._init_qdrant()
 
     def _make_components(self):
-        """Build the neural components for the configured backend (vllm | vertex_ai)."""
+        """Build the neural components for the configured backend (vllm | vertex_ai | garden)."""
+        if self.config.backend == "garden":
+            # Vertex AI Model Garden (open-source, compliant). Allows mixing —
+            # e.g. embedder=Qwen3 on Garden + LLM=Gemini until a Gemma 3 GPU
+            # endpoint exists. Returns the same 4-component tuple as the others.
+            from garden_backends import make_garden_components
+            return make_garden_components(self.config, mock=self.mock)
         if self.config.backend == "vertex_ai":
             # Vertex subclasses override only the model-call hook; imported here
             # so the vLLM path never touches google-genai.

@@ -87,8 +87,32 @@ class GeneratorConfig:
 
 
 @dataclass
+class GardenConfig:
+    """
+    Vertex AI Model Garden (open-source, competition-compliant) backend — PURE
+    Garden: all components run open-source models on Vertex AI Online Endpoints
+    (no Gemini fallback; use backend=vertex_ai for that).
+
+    Flat by design so the existing `_section` loader parses it without nesting.
+    Endpoints are OpenAI-compatible vLLM serving; auth is a refreshed google-auth
+    bearer token (see garden_backends.py).
+    """
+    # Embedder endpoint (Qwen3-Embedding-8B).
+    embed_endpoint_id: str = ""
+    embed_model: str = "Qwen3-Embedding-8B"
+    # LLM + reranker endpoint (Gemma 3 12B-it — same endpoint, two roles).
+    llm_endpoint_id: str = ""
+    llm_model: str = "gemma-3-12b-it"
+    # Shared GCP location for the endpoint URL.
+    project_id: str = ""
+    region: str = "us-central1"
+    max_retries: int = 3
+    timeout: int = 120
+
+
+@dataclass
 class RetrievalConfig:
-    backend: str = "vllm"   # "vllm" | "vertex_ai"
+    backend: str = "vllm"   # "vllm" | "vertex_ai" | "garden"
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
     vllm: VllmConfig = field(default_factory=VllmConfig)
     models: ModelsConfig = field(default_factory=ModelsConfig)
@@ -96,6 +120,7 @@ class RetrievalConfig:
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     retrieval: RetrievalParams = field(default_factory=RetrievalParams)
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
+    garden: GardenConfig = field(default_factory=GardenConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +188,7 @@ def load_config(path: Path | str = _DEFAULT_CONFIG_PATH) -> RetrievalConfig:
         ("reranker",  RerankerConfig,  "reranker"),
         ("retrieval", RetrievalParams, "retrieval"),
         ("generator", GeneratorConfig, "generator"),
+        ("garden",    GardenConfig,    "garden"),
     ]:
         parsed = _section(name, cls)
         if parsed is not None:
@@ -188,11 +214,46 @@ def validate_config(cfg: RetrievalConfig) -> list[str]:
             errors.append(
                 "no GCP auth — set GCP_PROJECT (Vertex/ADC) or GOOGLE_API_KEY in .env"
             )
+    elif cfg.backend == "garden":
+        _validate_garden(cfg, errors)
     elif cfg.backend == "vllm":
         if not cfg.vllm.base_url:
             errors.append("vllm.base_url is empty")
         if not cfg.qdrant.host:
             errors.append("qdrant.host is empty")
     else:
-        errors.append(f"unknown backend '{cfg.backend}' (expected 'vllm' or 'vertex_ai')")
+        errors.append(
+            f"unknown backend '{cfg.backend}' "
+            "(expected 'vllm', 'vertex_ai' or 'garden')"
+        )
     return errors
+
+
+def _validate_garden(cfg: RetrievalConfig, errors: list[str]) -> None:
+    """Validation for the pure Vertex AI Model Garden backend."""
+    g = cfg.garden
+
+    # Qdrant: a URL means remote (needs api_key unless localhost); otherwise the
+    # local host/port pair is used.
+    if cfg.qdrant.url:
+        is_local = any(h in cfg.qdrant.url for h in ("localhost", "127.0.0.1"))
+        if not is_local and not cfg.qdrant.api_key:
+            errors.append("qdrant.api_key is empty — set QDRANT_API_KEY in .env")
+    elif not cfg.qdrant.host:
+        errors.append("qdrant.host is empty")
+
+    # Both endpoints are required — every component runs on Garden.
+    if not g.embed_endpoint_id:
+        errors.append("garden.embed_endpoint_id empty — set GARDEN_EMBED_ENDPOINT_ID in .env")
+    if not g.llm_endpoint_id:
+        errors.append("garden.llm_endpoint_id empty — set GARDEN_LLM_ENDPOINT_ID in .env")
+    if not g.project_id:
+        errors.append("garden.project_id empty — set GCP_PROJECT in .env")
+
+    # The dense vector size must match the embedder's output dimension, or every
+    # Qdrant upsert/search will fail at runtime.
+    if cfg.embedding.dimension != cfg.qdrant.vector_size:
+        errors.append(
+            f"embedding.dimension ({cfg.embedding.dimension}) != "
+            f"qdrant.vector_size ({cfg.qdrant.vector_size})"
+        )
