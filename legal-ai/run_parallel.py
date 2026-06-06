@@ -81,17 +81,23 @@ def main() -> None:
                     log.info("  %d/%d done  (%.2f q/s, ETA %.0f min)",
                              done, total, rate, eta / 60)
 
-    # Retry stragglers sequentially. A fallback entry (empty relevant_articles)
-    # usually means a transient Qdrant/Gemini timeout under concurrency — a
-    # single-threaded retry recovers it without the rate pressure.
-    failed = [q for q in questions if not results[q["id"]].get("relevant_articles")]
-    if failed:
-        log.info("Retrying %d straggler(s) sequentially…", len(failed))
-        for q in failed:
-            r = pipeline.process_question(q["id"], q["question"])
-            results[r["id"]] = r
-        still = sum(1 for q in questions if not results[q["id"]].get("relevant_articles"))
-        log.info("After retry: %d still empty", still)
+    # Retry stragglers. A fallback entry (empty relevant_articles) usually means
+    # a transient Qdrant/Gemini timeout under concurrency. Retry in rounds at a
+    # gentler concurrency so a large backlog (from high --workers) clears fast
+    # without re-thrashing the free-tier Qdrant.
+    retry_workers = max(1, min(4, args.workers))
+    for rnd in range(1, 4):
+        failed = [q for q in questions if not results[q["id"]].get("relevant_articles")]
+        if not failed:
+            break
+        log.info("Retry round %d: %d straggler(s) at %d workers…",
+                 rnd, len(failed), retry_workers)
+        with ThreadPoolExecutor(max_workers=retry_workers) as ex:
+            for r in ex.map(_work, failed):
+                results[r["id"]] = r
+    still = sum(1 for q in questions if not results[q["id"]].get("relevant_articles"))
+    if still:
+        log.info("After retries: %d still empty (kept as fallback entries)", still)
 
     # Preserve input order; guarantee every id is present.
     ordered = [results[q["id"]] for q in questions]

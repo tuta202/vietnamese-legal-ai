@@ -1,0 +1,202 @@
+[
+  {
+    "id": 1,
+    "question": "Các cơ sở ươm tạo và khu làm việc chung được hưởng những chính sách hỗ trợ nào về thuế và đất đai?"
+  },
+  {
+    "id": 41,
+    "question": "Khi công ty nợ thuế, cơ quan thuế có thể áp dụng những biện pháp cưỡng chế nào?"
+  },
+  {
+    "id": 81,
+    "question": "Hóa đơn khởi tạo từ máy tính tiền kết nối với cơ quan thuế có bắt buộc phải có chữ ký số không?"
+  },
+  {
+    "id": 121,
+    "question": "Nếu công ty khai sai căn cứ tính thuế dẫn đến thiếu số tiền thuế phải nộp nhưng mọi nghiệp vụ đều có hóa đơn chứng từ đầy đủ thì bị xử phạt thế nào?"
+  },
+  {
+    "id": 161,
+    "question": "Khi hạch toán tiền gửi ngân hàng, công ty cần căn cứ vào những loại chứng từ nào?"
+  },
+  {
+    "id": 201,
+    "question": "Khi viết sai chứng từ kế toán thì công ty phải xử lý như thế nào cho đúng quy định?"
+  },
+  {
+    "id": 241,
+    "question": "Hộ kinh doanh cần gửi hồ sơ đăng ký tạm ngừng kinh doanh trước bao nhiêu ngày?"
+  },
+  {
+    "id": 281,
+    "question": "Khi muốn tạm ngừng kinh doanh, công ty phải gửi hồ sơ thông báo đến Cơ quan đăng ký kinh doanh trước bao nhiêu ngày?"
+  },
+  {
+    "id": 321,
+    "question": "Khi bán hàng từ xa, công ty cần cung cấp những thông tin gì cho người tiêu dùng?"
+  },
+  {
+    "id": 361,
+    "question": "Trước khi thực hiện nhượng quyền thương mại thì công ty phải đăng ký với cơ quan nào?"
+  },
+  {
+    "id": 401,
+    "question": "Công ty phải làm gì nếu không đồng ý với kiến nghị về nghĩa vụ thuế của Kiểm toán nhà nước khi họ trực tiếp kiểm toán doanh nghiệp?"
+  },
+  {
+    "id": 441,
+    "question": "Doanh nghiệp nhỏ và vừa khởi nghiệp sáng tạo cần đảm bảo tỷ lệ vốn chủ sở hữu tối thiểu bao nhiêu khi vay vốn từ Quỹ phát triển doanh nghiệp nhỏ và vừa?"
+  },
+  {
+    "id": 481,
+    "question": "Nhân viên nữ mang thai được nghỉ đi khám thai tối đa bao nhiêu lần và mỗi lần bao nhiêu ngày?"
+  },
+  {
+    "id": 521,
+    "question": "Những ngày lễ, tết nào trong năm mà nhân viên công ty được nghỉ làm việc và hưởng nguyên lương?"
+  },
+  {
+    "id": 561,
+    "question": "Khi thành viên góp vốn bằng tài sản không đăng ký quyền sở hữu vào công ty, biên bản giao nhận tài sản cần có những nội dung chính nào và ai là người đại diện công ty ký tên vào biên bản đó?"
+  },
+  {
+    "id": 601,
+    "question": "Khi công ty thuê khoán một nhà xưởng nhưng trong hợp đồng không ghi rõ thời hạn thuê thì thời hạn này được xác định thế nào và lúc bàn giao tài sản cần làm những thủ tục gì?"
+  },
+  {
+    "id": 641,
+    "question": "Trong trường hợp cơ quan bảo hiểm xã hội từ chối chi trả trợ cấp hằng tháng cho một nhân viên đủ tuổi nghỉ hưu nhưng không đủ điều kiện hưởng lương hưu, cơ quan này phải phản hồi như thế nào và có quyền yêu cầu công ty cung cấp những tài liệu gì để rà soát lại?"
+  },
+  {
+    "id": 681,
+    "question": "Khi đoàn kiểm tra kế toán đến làm việc tại công ty, họ có nghĩa vụ phải thực hiện những gì và công ty có quyền từ chối kiểm tra trong trường hợp nào?"
+  },
+  {
+    "id": 721,
+    "question": "Khi công ty cung cấp dịch vụ liên tục cho khách hàng thông qua một sự kiện bán hàng lưu động có giá trị trên 10 triệu đồng, hợp đồng cần đảm bảo những nội dung gì và khách hàng có quyền đơn phương chấm dứt hợp đồng trong thời hạn bao lâu kể từ khi nhận văn bản?"
+  },
+  {
+    "id": 761,
+    "question": "Khi xảy ra tai nạn lao động làm chết người tại xưởng, công ty cần thực hiện khai báo khẩn cấp cho những cơ quan nào và sau đó phải thực hiện báo cáo định kỳ ra sao?"
+  },
+  {
+    "id": 801,
+    "question": "Nếu công ty áp dụng các nội dung trong thỏa ước lao động tập thể đã bị tuyên bố vô hiệu cho nhân viên thì phải xử lý như thế nào và rủi ro bị xử phạt hành chính ra sao?"
+  },
+  {
+    "id": 841,
+    "question": "Nếu công ty nộp đơn đăng ký sáng chế nhưng bị cơ quan quản lý tạm dừng thẩm định để kiểm soát an ninh và công ty không thực hiện đăng ký theo thủ tục bảo vệ bí mật nhà nước trong thời hạn quy định, thì đơn sẽ bị xử lý thế nào và công ty có thể chủ động rút đơn này bằng cách nào?"
+  },
+  {
+    "id": 881,
+    "question": "Công ty tôi là doanh nghiệp nhỏ và vừa đang muốn tham gia chuỗi giá trị, vậy tôi có thể tra cứu miễn phí những thông tin gì trên Cổng thông tin quốc gia và được hỗ trợ chi phí cho những hoạt động tư vấn, đào tạo cụ thể nào?"
+  },
+  {
+    "id": 921,
+    "question": "Nếu công ty không đóng bảo hiểm tai nạn lao động, bệnh nghề nghiệp cho nhân viên thì khi có người bị tai nạn ngoài phạm vi doanh nghiệp hoặc mắc bệnh nghề nghiệp, công ty phải xử lý bồi thường, chi trả và báo cáo cho cơ quan nhà nước như thế nào?"
+  },
+  {
+    "id": 961,
+    "question": "Một nhân viên nữ mang thai có xác nhận của bệnh viện về việc tiếp tục làm việc sẽ ảnh hưởng xấu tới thai nhi nên muốn tạm hoãn hợp đồng, đồng thời cô ấy phản ánh công ty không cho nghỉ 30 phút mỗi ngày trong thời gian hành kinh thì công ty phải xử lý yêu cầu tạm hoãn này thế nào và rủi ro pháp lý đối với việc không cho nghỉ hành kinh là gì?"
+  },
+  {
+    "id": 1001,
+    "question": "Khi công ty chuyển đổi loại hình doanh nghiệp, để đảm bảo tài sản an toàn và báo cáo tài chính trung thực trước khi bàn giao, công ty cần thực hiện những công việc kế toán nào và nếu có đoàn kiểm tra kế toán vào thời điểm này thì họ có quyền hạn gì?"
+  },
+  {
+    "id": 1041,
+    "question": "Công ty muốn nộp đơn đăng ký nhãn hiệu tại Việt Nam và hưởng quyền ưu tiên từ đơn đã nộp tại Pháp, nhưng sau đó bị một bên khác nộp ý kiến phản đối về khả năng phân biệt của nhãn hiệu thì quy trình xử lý và điều kiện hưởng quyền ưu tiên này được thực hiện như thế nào?"
+  },
+  {
+    "id": 1081,
+    "question": "Công ty tôi muốn chuyển từ mô hình giao đại lý sang nhượng quyền thương mại để kiểm soát cách vận hành và nhãn hiệu, vậy công ty cần thực hiện thủ tục gì và quyền sở hữu hàng hóa lúc này thay đổi ra sao so với khi làm đại lý?"
+  },
+  {
+    "id": 1121,
+    "question": "Công ty muốn ủy quyền cho một đơn vị đại diện nộp đơn đăng ký chỉ dẫn địa lý cho sản phẩm đặc sản của mình thì giấy ủy quyền cần những nội dung gì, hồ sơ đơn đăng ký phải chuẩn bị những tài liệu nào và nếu đơn bị coi là không hợp lệ thì quy trình xử lý của cơ quan quản lý ra sao?"
+  },
+  {
+    "id": 1161,
+    "question": "Trong trường hợp hợp đồng lao động bị tuyên bố vô hiệu toàn bộ, công ty cần xử lý việc ký lại hợp đồng như thế nào, cách tính lương cho những ngày nghỉ lễ tết trong thời gian chờ ký lại và các yêu cầu về buồng vệ sinh, buồng tắm tại nơi làm việc mà công ty bắt buộc phải đảm bảo là gì?"
+  },
+  {
+    "id": 1201,
+    "question": "Nếu công ty tự ý sửa đổi nội dung tác phẩm của đối tác gây ảnh hưởng xấu đến uy tín tác giả và làm mất đi các hợp đồng cho thuê bản gốc tác phẩm đó, thì hành vi này được xác định là xâm phạm quyền tác giả như thế nào và công ty phải bồi thường những khoản thiệt hại gì?"
+  },
+  {
+    "id": 1241,
+    "question": "Nếu quá thời hạn góp vốn của Công ty TNHH một thành viên thì ai sẽ là người chịu trách nhiệm?"
+  },
+  {
+    "id": 1281,
+    "question": "Doanh nghiệp có phải chi trả trợ cấp mất việc làm cho người lao động ký hợp đồng lao động dưới 12 tháng không?"
+  },
+  {
+    "id": 1321,
+    "question": "Việc tạm ứng hợp đồng trong xây dựng được quy định theo những nguyên tắc nào?"
+  },
+  {
+    "id": 1361,
+    "question": "Người lao động hưởng lương theo sản phẩm có được tạm ứng lương không?"
+  },
+  {
+    "id": 1401,
+    "question": "Quy định về tính mới của kiểu dáng công nghiệp hiện nay như thế nào?"
+  },
+  {
+    "id": 1441,
+    "question": "Trong trường hợp mẹ kế mất, người lao động có được nghỉ việc mà vẫn hưởng nguyên lương không?"
+  },
+  {
+    "id": 1481,
+    "question": "Việc áp dụng quy chuẩn kỹ thuật môi trường và sử dụng các thông số môi trường để xác định hành vi vi phạm hành chính trong lĩnh vực bảo vệ môi trường được quy định như thế nào?"
+  },
+  {
+    "id": 1521,
+    "question": "Vị trí của kế toán trưởng trong bộ máy kế toán của đơn vị được quy định như thế nào?"
+  },
+  {
+    "id": 1561,
+    "question": "Doanh nghiệp kinh doanh vận tải hành khách bằng xe taxi phải chuyển dữ liệu hóa đơn đến cơ quan thuế bằng hình thức nào?"
+  },
+  {
+    "id": 1601,
+    "question": "Người sử dụng lao động có trách nhiệm quản lý lao động như thế nào?"
+  },
+  {
+    "id": 1641,
+    "question": "Công ty có nhân viên nữ mang thai hộ, trong thời gian này công ty không cho họ nghỉ 30 phút mỗi ngày khi hành kinh và sau đó kỷ luật lao động khi họ đang nghỉ thai sản thì sẽ bị xử lý và khắc phục hậu quả như thế nào, đồng thời chế độ nghỉ thai sản cho trường hợp mang thai hộ này được tính ra sao?"
+  },
+  {
+    "id": 1681,
+    "question": "Công ty tôi thu phí tuyển dụng của nhân viên mới, đồng thời chưa lập sổ quản lý lao động dù đã hoạt động hơn một tháng thì sẽ bị xử lý thế nào và phải khắc phục ra sao?"
+  },
+  {
+    "id": 1721,
+    "question": "Công ty tôi là doanh nghiệp cung ứng dịch vụ kiểm định kỹ thuật an toàn lao động, hiện đang yêu cầu hải quan kiểm soát lô hàng nhập khẩu nghi xâm phạm quyền sở hữu trí tuệ của mình và đồng thời xử lý khiếu nại từ một khách hàng là người khuyết tật; vậy công ty cần thực hiện những nghĩa vụ và trách nhiệm bồi thường nào trong hai trường hợp này?"
+  },
+  {
+    "id": 1761,
+    "question": "Hộ kinh doanh của tôi không thực hiện chế độ kế toán nên đang nộp thuế khoán, nay muốn chuyển sang kinh doanh trên nền tảng thương mại điện tử có chức năng thanh toán và nếu vô tình ngừng hoạt động tại địa chỉ đăng ký quá 6 tháng mà không thông báo thì cách xác định mức thuế, trách nhiệm khai thuế và rủi ro về giấy phép sẽ như thế nào?"
+  },
+  {
+    "id": 1801,
+    "question": "Công ty tôi muốn thay đổi tên doanh nghiệp, đồng thời cập nhật lại ngành nghề kinh doanh và điều chỉnh thông tin cổ đông sáng lập thì quy trình thực hiện, thời hạn thông báo và hồ sơ cần chuẩn bị cho mỗi nội dung này như thế nào?"
+  },
+  {
+    "id": 1841,
+    "question": "Công ty tôi muốn đóng cửa toàn bộ doanh nghiệp, nhưng hiện có một chi nhánh đã ngừng hoạt động hơn một năm mà chưa thông báo và một văn phòng đại diện đang trong thời hạn tạm ngừng kinh doanh thì phải xử lý trình tự giải thể và các đơn vị phụ thuộc này như thế nào?"
+  },
+  {
+    "id": 1881,
+    "question": "Khi xảy ra tranh chấp về mức thù lao phải trả cho tác giả giống cây trồng, công ty là chủ Bằng bảo hộ có thể yêu cầu giám định quyền đối với giống cây trồng như thế nào?"
+  },
+  {
+    "id": 1921,
+    "question": "Nếu công ty chưa lập sổ quản lý lao động cho nhân viên hoặc lập nhưng thiếu các thông tin cơ bản như trình độ chuyên môn, tiền lương thì sẽ bị xử lý như thế nào?"
+  },
+  {
+    "id": 1961,
+    "question": "Khi công ty dùng bất động sản có vật phụ để thế chấp vay vốn và được Quỹ bảo lãnh tín dụng hỗ trợ, thì vật phụ đó có mặc định thuộc tài sản thế chấp không và Quỹ bảo lãnh có thể bảo lãnh cho những nghĩa vụ trả nợ nào?"
+  }
+]

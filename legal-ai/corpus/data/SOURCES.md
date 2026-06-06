@@ -5,7 +5,7 @@
 - **Origin:** vbpl.vn (Cổng thông tin điện tử Bộ Tư pháp)
 - **DOI:** 10.57967/hf/8598
 - **Pinned revision:** `0a39ad7eae8e6c188cb225c4b1443c3b346461d8`
-- **Downloaded / built:** 2026-06-05
+- **Downloaded / built:** 2026-06-06
 - **Citation name variant:** `loai_title`
 
 ## Article counts

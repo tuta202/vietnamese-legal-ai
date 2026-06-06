@@ -180,7 +180,9 @@ def validate_config(cfg: RetrievalConfig) -> list[str]:
     if cfg.backend == "vertex_ai":
         if not cfg.qdrant.url:
             errors.append("qdrant.url is empty — set QDRANT_URL in .env")
-        if not cfg.qdrant.api_key:
+        # A local Qdrant (localhost) needs no api_key; only require it for remote.
+        is_local = any(h in cfg.qdrant.url for h in ("localhost", "127.0.0.1"))
+        if not is_local and not cfg.qdrant.api_key:
             errors.append("qdrant.api_key is empty — set QDRANT_API_KEY in .env")
         if not cfg.vllm.gcp_project and not os.environ.get("GOOGLE_API_KEY"):
             errors.append(

@@ -264,7 +264,9 @@ class HFIngest:
         raw = self._title_map.get(_norm(art["law_id"]).casefold())
         if not raw:
             return
-        name = LegalTextParser._strip_type_prefix(raw, art["law_type"]).strip()
+        # Collapse internal whitespace (some HF titles contain embedded newlines,
+        # which would break the single-line `mã|tên|Điều` citation format).
+        name = re.sub(r"\s+", " ", LegalTextParser._strip_type_prefix(raw, art["law_type"])).strip()
         if name:
             art["law_name"] = name[0].upper() + name[1:]
 
