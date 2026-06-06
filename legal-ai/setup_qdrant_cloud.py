@@ -39,54 +39,76 @@ def _qdrant_client(config: RetrievalConfig):
 
 def _index_corpus(client, embedder, config: RetrievalConfig, articles: list[dict]) -> int:
     """
-    Resilient batched embed + upsert (wait=False, per-batch retry).
-    Idempotent (point id = chunk_id), so re-running fills any gaps without
-    re-embedding completed batches within a run.
+    Resilient, RESUMABLE batched embed + upsert (wait=False, per-batch retry).
+
+    Point id = UUID(chunk_id). Before embedding a batch we retrieve which of its
+    ids already exist in the collection and skip those — so a re-run after a
+    crash (or after hitting the free-tier capacity ceiling) continues from where
+    it stopped WITHOUT re-embedding completed points (no wasted Gemini credits).
+    Returns the number of points confirmed present (embedded this run + already
+    there).
     """
     import time
     import uuid
     from qdrant_client.models import PointStruct
 
+    name = config.qdrant.collection
     bs = max(1, int(config.embedding.batch_size))
     total = len(articles)
     done = 0
+    embedded = 0   # points actually embedded this run (≈ Gemini embed calls × bs)
     for i in range(0, total, bs):
         batch = articles[i:i + bs]
-        texts = [embedder._format_document(a) for a in batch]
-        vectors = embedder.embed_documents(texts)
-        points = [
-            PointStruct(
-                id=str(uuid.UUID(a["chunk_id"])),
-                vector=vec.tolist(),
-                payload={
-                    "chunk_id":             a["chunk_id"],
-                    "law_id":               a["law_id"],
-                    "law_type":             a["law_type"],
-                    "law_name":             a["law_name"],
-                    "dieu_number":          a["dieu_number"],
-                    "dieu_title":           a["dieu_title"],
-                    "content":              a["content"],
-                    "relevant_doc_str":     a["relevant_doc_str"],
-                    "relevant_article_str": a["relevant_article_str"],
-                },
-            )
-            for a, vec in zip(batch, vectors)
-        ]
-        for attempt in range(4):
-            try:
-                client.upsert(collection_name=config.qdrant.collection,
-                              points=points, wait=False)
-                break
-            except Exception as e:
-                if attempt == 3:
-                    raise
-                wait_s = 2 * (attempt + 1)
-                print(f"\n  [retry] upsert batch failed ({type(e).__name__}); "
-                      f"retrying in {wait_s}s…")
-                time.sleep(wait_s)
-        done += len(points)
-        print(f"  upserted {done}/{total}", end="\r", flush=True)
+        ids = [str(uuid.UUID(a["chunk_id"])) for a in batch]
+
+        # Resumable: skip points already in the collection.
+        try:
+            present = client.retrieve(collection_name=name, ids=ids,
+                                      with_payload=False, with_vectors=False)
+            present_ids = {str(p.id) for p in present}
+        except Exception:
+            present_ids = set()
+        todo = [(a, pid) for a, pid in zip(batch, ids) if pid not in present_ids]
+
+        if todo:
+            texts = [embedder._format_document(a) for a, _ in todo]
+            vectors = embedder.embed_documents(texts)
+            embedded += len(todo)
+            points = [
+                PointStruct(
+                    id=pid,
+                    vector=vec.tolist(),
+                    payload={
+                        "chunk_id":             a["chunk_id"],
+                        "law_id":               a["law_id"],
+                        "law_type":             a["law_type"],
+                        "law_name":             a["law_name"],
+                        "dieu_number":          a["dieu_number"],
+                        "dieu_title":           a["dieu_title"],
+                        "content":              a["content"],
+                        "relevant_doc_str":     a["relevant_doc_str"],
+                        "relevant_article_str": a["relevant_article_str"],
+                    },
+                )
+                for (a, pid), vec in zip(todo, vectors)
+            ]
+            for attempt in range(4):
+                try:
+                    client.upsert(collection_name=name, points=points, wait=False)
+                    break
+                except Exception as e:
+                    if attempt == 3:
+                        raise
+                    wait_s = 2 * (attempt + 1)
+                    print(f"\n  [retry] upsert batch failed ({type(e).__name__}); "
+                          f"retrying in {wait_s}s…")
+                    time.sleep(wait_s)
+
+        done += len(batch)
+        print(f"  {done}/{total} (embedded this run: {embedded})", end="\r", flush=True)
     print()
+    print(f"  embedded {embedded} new points this run; "
+          f"{total - embedded} were already present")
     return done
 
 

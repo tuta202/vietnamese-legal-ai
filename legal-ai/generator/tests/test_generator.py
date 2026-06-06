@@ -239,13 +239,13 @@ class TestGeneratorConfig:
             pytest.skip("config.yaml not found")
         cfg = load_config(cfg_path)
         assert cfg.generator.temperature == 0.3
-        assert cfg.generator.max_tokens == 2048
+        assert cfg.generator.max_tokens == 3000
         assert cfg.generator.max_articles == 7
 
     def test_default_generator_config(self):
         cfg = RetrievalConfig()
         assert cfg.generator.temperature == 0.3
-        assert cfg.generator.max_tokens == 2048
+        assert cfg.generator.max_tokens == 3000
         assert cfg.generator.top_p == 0.9
 
 

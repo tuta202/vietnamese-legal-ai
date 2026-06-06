@@ -81,7 +81,7 @@ class RetrievalParams:
 @dataclass
 class GeneratorConfig:
     temperature: float = 0.3
-    max_tokens: int = 2048
+    max_tokens: int = 3000
     top_p: float = 0.9
     max_articles: int = 7   # max context articles passed to the LLM
 

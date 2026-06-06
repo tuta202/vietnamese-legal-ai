@@ -314,12 +314,32 @@ class LegalAIPipeline:
           • payloads = {chunk_id: qdrant_payload} for resolving hits not in BM25.
         """
         vec_list = vector.tolist() if hasattr(vector, "tolist") else list(vector)
-        resp = self._qdrant.query_points(
-            collection_name=self.config.qdrant.collection,
-            query=vec_list,
-            limit=self.config.retrieval.top_k_dense,
-            with_payload=True,
-        )
+        
+        import time
+        max_attempts = 5
+        backoff = 1.0
+        resp = None
+
+        for attempt in range(max_attempts):
+            try:
+                resp = self._qdrant.query_points(
+                    collection_name=self.config.qdrant.collection,
+                    query=vec_list,
+                    limit=self.config.retrieval.top_k_dense,
+                    with_payload=True,
+                )
+                break
+            except Exception as e:
+                if attempt == max_attempts - 1:
+                    log.error("Qdrant search failed after %d attempts", max_attempts)
+                    raise e
+                log.warning(
+                    "Qdrant query failed (attempt %d/%d): %s. Retrying in %.1fs...",
+                    attempt + 1, max_attempts, e, backoff
+                )
+                time.sleep(backoff)
+                backoff *= 2.0
+
         points = getattr(resp, "points", resp)
 
         hits: list[tuple[str, float]] = []
