@@ -46,48 +46,83 @@ def main() -> None:
     ap.add_argument("--output", default="results.json")
     ap.add_argument("--workers", type=int, default=8,
                     help="concurrent questions (bounded by Gemini rate limits)")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="process only the first N questions (dry-run/benchmark)")
+    ap.add_argument("--resume", action="store_true",
+                    help="reuse completed entries from an existing --output file "
+                         "and only process the missing/fallback ones")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
+    if args.limit:
+        questions = questions[: args.limit]
     total = len(questions)
-    log.info("Loaded %d questions; workers=%d", total, args.workers)
+    out = Path(args.output)
+    lock = threading.Lock()
+
+    def _persist() -> None:
+        """Atomically write whatever results we have so far (input order)."""
+        ordered = [results[q["id"]] for q in questions if q["id"] in results]
+        tmp = out.with_suffix(out.suffix + ".tmp")
+        tmp.parent.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(json.dumps(ordered, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(out)
+
+    # Resume: load prior output; an entry counts as DONE only if it has
+    # relevant_articles (fallback/empty entries are reprocessed).
+    results: dict = {}
+    if args.resume and out.exists():
+        try:
+            for r in json.loads(out.read_text(encoding="utf-8")):
+                if r.get("id") is not None and r.get("relevant_articles"):
+                    results[r["id"]] = r
+            log.info("Resume: %d/%d already complete in %s", len(results), total, out)
+        except (json.JSONDecodeError, OSError) as e:
+            log.warning("Resume failed to read %s (%s) — starting fresh", out, e)
+
+    todo = [q for q in questions if q["id"] not in results]
+    log.info("Loaded %d questions; %d to process; workers=%d", total, len(todo), args.workers)
 
     pipeline = LegalAIPipeline(config_path=args.config, mock=False)
-
-    # Warm up lazy Gemini/Qdrant clients single-threaded on the first question,
-    # so concurrent threads never race the lazy-init.
-    t0 = time.time()
-    first = questions[0]
-    results: dict = {first["id"]: pipeline.process_question(first["id"], first["question"])}
-    log.info("Warmup question done in %.1fs (clients initialised)", time.time() - t0)
-
-    rest = questions[1:]
-    done = 1
-    lock = threading.Lock()
 
     def _work(q: dict) -> dict:
         return pipeline.process_question(q["id"], q["question"])
 
+    t0 = time.time()
+    if not todo:
+        log.info("Nothing to process — all complete.")
+        _persist()
+        return
+
+    # Warm up lazy clients single-threaded on the first pending question, so
+    # concurrent threads never race the lazy-init.
+    first = todo[0]
+    results[first["id"]] = pipeline.process_question(first["id"], first["question"])
+    log.info("Warmup question done in %.1fs (clients initialised)", time.time() - t0)
+    _persist()
+
+    rest = todo[1:]
+    processed = 1
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(_work, q): q["id"] for q in rest}
         for fut in as_completed(futures):
             r = fut.result()
             with lock:
                 results[r["id"]] = r
-                done += 1
-                if done % 50 == 0 or done == total:
-                    rate = done / (time.time() - t0)
-                    eta = (total - done) / rate if rate else 0
+                processed += 1
+                if processed % 50 == 0 or processed == len(todo):
+                    rate = processed / (time.time() - t0)
+                    eta = (len(todo) - processed) / rate if rate else 0
                     log.info("  %d/%d done  (%.2f q/s, ETA %.0f min)",
-                             done, total, rate, eta / 60)
+                             len(results), total, rate, eta / 60)
+                    _persist()   # checkpoint to disk
 
     # Retry stragglers. A fallback entry (empty relevant_articles) usually means
-    # a transient Qdrant/Gemini timeout under concurrency. Retry in rounds at a
-    # gentler concurrency so a large backlog (from high --workers) clears fast
-    # without re-thrashing the free-tier Qdrant.
+    # a transient Qdrant/LLM timeout under concurrency. Retry in rounds at a
+    # gentler concurrency so a large backlog (from high --workers) clears fast.
     retry_workers = max(1, min(4, args.workers))
     for rnd in range(1, 4):
-        failed = [q for q in questions if not results[q["id"]].get("relevant_articles")]
+        failed = [q for q in questions if not results.get(q["id"], {}).get("relevant_articles")]
         if not failed:
             break
         log.info("Retry round %d: %d straggler(s) at %d workers…",
@@ -95,17 +130,21 @@ def main() -> None:
         with ThreadPoolExecutor(max_workers=retry_workers) as ex:
             for r in ex.map(_work, failed):
                 results[r["id"]] = r
-    still = sum(1 for q in questions if not results[q["id"]].get("relevant_articles"))
+        _persist()
+    still = sum(1 for q in questions if not results.get(q["id"], {}).get("relevant_articles"))
     if still:
         log.info("After retries: %d still empty (kept as fallback entries)", still)
 
-    # Preserve input order; guarantee every id is present.
-    ordered = [results[q["id"]] for q in questions]
-    out = Path(args.output)
-    out.write_text(json.dumps(ordered, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Final write — guarantee every id is present (fallback entry if missing).
+    for q in questions:
+        results.setdefault(q["id"], {
+            "id": q["id"], "question": q["question"], "answer": "",
+            "relevant_docs": [], "relevant_articles": [],
+        })
+    _persist()
     elapsed = time.time() - t0
-    log.info("Wrote %d results → %s in %.1f min (%.2f q/s)",
-             len(ordered), out, elapsed / 60, total / elapsed)
+    log.info("Wrote %d results → %s in %.1f min (%.2f q/s this run)",
+             len(results), out, elapsed / 60, processed / elapsed)
 
 
 if __name__ == "__main__":

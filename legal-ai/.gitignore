@@ -7,6 +7,7 @@ submission/
 *.zip
 eval/data/eval_predictions.json
 eval/data/eval_results.json
+reembed_checkpoint.json
 
 # HF dataset cache (multi-GB raw parquet — never commit)
 corpus/data/hf_cache/

@@ -97,13 +97,19 @@ class GardenConfig:
     Endpoints are OpenAI-compatible vLLM serving; auth is a refreshed google-auth
     bearer token (see garden_backends.py).
     """
-    # Embedder endpoint (Qwen3-Embedding-8B).
+    # Embedder endpoint (Qwen3-Embedding-8B). Deployed as a Vertex dedicated
+    # endpoint (TEI predict API, NOT OpenAI), so it is called via its dedicated
+    # domain `embed_dns` with a :predict request — see GardenEmbedder._embed.
     embed_endpoint_id: str = ""
     embed_model: str = "Qwen3-Embedding-8B"
+    embed_dns: str = ""   # dedicated domain, e.g. <id>.<region>-<proj#>.prediction.vertexai.goog
+    embed_region: str = ""   # region of the embed endpoint; falls back to `region` if empty
     # LLM + reranker endpoint (Gemma 3 12B-it — same endpoint, two roles).
     llm_endpoint_id: str = ""
-    llm_model: str = "gemma-3-12b-it"
-    # Shared GCP location for the endpoint URL.
+    llm_model: str = "google/gemma-3-12b-it"
+    llm_dns: str = ""   # dedicated domain for the LLM endpoint; empty → shared aiplatform domain
+    # GCP project + the LLM endpoint's region (embed may live in another region;
+    # see embed_region). The two endpoints can be in DIFFERENT regions.
     project_id: str = ""
     region: str = "us-central1"
     max_retries: int = 3
@@ -245,6 +251,8 @@ def _validate_garden(cfg: RetrievalConfig, errors: list[str]) -> None:
     # Both endpoints are required — every component runs on Garden.
     if not g.embed_endpoint_id:
         errors.append("garden.embed_endpoint_id empty — set GARDEN_EMBED_ENDPOINT_ID in .env")
+    if not g.embed_dns:
+        errors.append("garden.embed_dns empty — set GARDEN_EMBED_DNS in .env (dedicated domain)")
     if not g.llm_endpoint_id:
         errors.append("garden.llm_endpoint_id empty — set GARDEN_LLM_ENDPOINT_ID in .env")
     if not g.project_id:

@@ -91,11 +91,17 @@ def _reset_creds() -> None:
 
 
 def _garden_client(g: GardenConfig, endpoint_id: str):
-    """Build an OpenAI client pointed at a Vertex AI Model Garden endpoint."""
+    """
+    Build an OpenAI client for the Garden LLM endpoint. A *dedicated* endpoint
+    (llm_dns set) is only reachable on its own domain; a *standard* endpoint uses
+    the shared aiplatform domain. Both expose OpenAI /chat/completions at
+    .../endpoints/{id}.
+    """
     from openai import OpenAI  # lazy
 
+    host = g.llm_dns or f"{g.region}-aiplatform.googleapis.com"
     base_url = (
-        f"https://{g.region}-aiplatform.googleapis.com/v1beta1/"
+        f"https://{host}/v1beta1/"
         f"projects/{g.project_id}/locations/{g.region}/endpoints/{endpoint_id}"
     )
     return OpenAI(base_url=base_url, api_key=_gcp_token(), timeout=g.timeout)
@@ -177,15 +183,44 @@ class GardenEmbedder(LegalEmbedder):
     """
 
     def _embed(self, texts: list[str]) -> list[list[float]]:
+        """
+        Embed via the Vertex AI dedicated-endpoint :predict API (TEI container),
+        NOT the OpenAI route — this Qwen3 endpoint is a dedicated endpoint and is
+        only reachable on its dedicated domain. Request/response shape (verified):
+            POST https://{embed_dns}/v1/projects/{proj}/locations/{region}/
+                 endpoints/{id}:predict
+            body  {"instances": [{"inputs": "<text>"}, ...]}
+            resp  {"predictions": [[[...4096 floats...]], ...]}  # vector = pred[0]
+        """
         g = self.config.garden
+        region = g.embed_region or g.region   # embed may live in another region
+        url = (
+            f"https://{g.embed_dns}/v1/projects/{g.project_id}/"
+            f"locations/{region}/endpoints/{g.embed_endpoint_id}:predict"
+        )
+        body = {"instances": [{"inputs": t} for t in texts]}
 
         def call() -> list[list[float]]:
-            client = _garden_client(g, g.embed_endpoint_id)
-            resp = client.embeddings.create(model=g.embed_model, input=texts)
-            return [list(d.embedding) for d in resp.data]
+            import requests  # lazy
+            resp = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {_gcp_token()}"},
+                json=body,
+                timeout=g.timeout,
+            )
+            if resp.status_code != 200:
+                # Surface the status code so _garden_retry can classify 401/429/5xx.
+                raise EmbeddingError(f"predict {resp.status_code}: {resp.text[:200]}")
+            preds = resp.json().get("predictions")
+            if not preds:
+                raise EmbeddingError("predict returned no predictions")
+            # Each prediction is [[...vector...]]; unwrap the inner vector.
+            return [p[0] if (p and isinstance(p[0], list)) else p for p in preds]
 
         try:
             return _garden_retry(call, g.max_retries + 2)
+        except EmbeddingError:
+            raise
         except Exception as e:
             raise EmbeddingError(f"garden embed failed: {e}") from e
 
@@ -209,15 +244,22 @@ class GardenEmbedder(LegalEmbedder):
 # Reranker
 # ---------------------------------------------------------------------------
 
-_RERANK_BATCH = 10   # docs per LLM scoring call (TIP SPEC-2)
+# Score the WHOLE candidate pool in ONE call (set high enough to cover
+# top_k_fusion). Batching into small chunks would score each chunk on an
+# independent 0–10 scale with no cross-chunk calibration — a "7" in one call is
+# not comparable to a "7" in another. A single call gives the model every
+# candidate at once, so the scores share one global scale (this matches the
+# Vertex/Gemini reranker, which also scores the whole pool in one call). At
+# top_k_fusion=40 the prompt is ~7K tokens — trivial for Gemma 3 12B on A100.
+_RERANK_BATCH = 100
 
 
 class GardenReranker(LegalReranker):
     """
     LLM-based reranker (Gemma). Overrides only the scoring hook; rerank() (mock
-    short-circuit + sort + truncate) is inherited unchanged. Uses the shared
-    reranking prompt + JSON parser; scores in batches of _RERANK_BATCH so a long
-    candidate pool fits comfortably in one prompt each.
+    short-circuit + sort + truncate) is inherited unchanged. Scores the whole
+    candidate pool in ONE call (_RERANK_BATCH) so all scores share a single,
+    globally-calibrated 0–10 scale — see the _RERANK_BATCH note.
     """
 
     def _score(self, question: str, candidates: list[dict]) -> list[float]:
@@ -255,6 +297,9 @@ class GardenReranker(LegalReranker):
                     {"role": "user", "content": "\n".join(blocks)},
                 ],
                 temperature=self.config.reranker.temperature,
+                # Bound the JSON array. Whole-pool scoring (~40 items) needs more
+                # room than a 10-item batch did (~40×{"index":N,"score":N}).
+                max_tokens=2048,
             )
             return resp.choices[0].message.content or ""
 

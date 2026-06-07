@@ -16,12 +16,17 @@ qdrant:
 
 # Vertex AI Model Garden endpoints (OpenAI-compatible vLLM serving).
 garden:
+  # Embed (Qwen3) — dedicated TEI :predict endpoint in asia-northeast1.
   embed_endpoint_id: ${GARDEN_EMBED_ENDPOINT_ID}
   embed_model: Qwen3-Embedding-8B
+  embed_dns: ${GARDEN_EMBED_DNS}        # dedicated domain (TEI :predict, not OpenAI)
+  embed_region: asia-northeast1
+  # LLM (Gemma 3 12B-it) — dedicated OpenAI endpoint on A100 in asia-southeast1.
   llm_endpoint_id: ${GARDEN_LLM_ENDPOINT_ID}
-  llm_model: meta-llama/Meta-Llama-3.1-8B-Instruct
+  llm_model: google/gemma-3-12b-it      # exact vLLM served name (verified via probe)
+  llm_dns: ${GARDEN_LLM_DNS}            # dedicated domain (OpenAI /chat/completions)
   project_id: ${GCP_PROJECT}
-  region: us-central1
+  region: asia-southeast1               # LLM region (embed is in embed_region above)
   max_retries: 3
   timeout: 120
 
@@ -43,6 +48,7 @@ retrieval:
 
 generator:
   temperature: 0.1
-  max_tokens: 2048
+  max_tokens: 3000   # Llama 3.1 output cap is 8192; 3000 avoids truncating
+                     # recall-heavy answers (matches config_vertex.yaml)
   top_p: 0.9
   max_articles: 7

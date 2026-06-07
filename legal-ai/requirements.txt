@@ -5,7 +5,8 @@ qdrant-client>=1.12   # pipeline uses query_points() (search() removed in 1.12)
 pytest>=7.0
 
 # Backend SDKs (imported lazily — only needed for real, non-mock runs).
-openai>=1.30.0        # OpenAI-compatible calls: local vLLM + Garden endpoints
+openai>=1.30.0        # OpenAI-compatible calls: local vLLM + Garden LLM endpoint
+requests>=2.31        # Garden embed endpoint (dedicated-domain :predict, TEI)
 google-auth>=2.29.0   # GCP bearer-token auth + refresh for Garden endpoints
 google-genai>=0.3.0   # Gemini backend (vertex_ai / garden *_provider=gemini)
 tqdm>=4.66.0          # reembed.py progress bar

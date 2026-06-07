@@ -79,11 +79,14 @@ def retry_transient(
     Call fn(); on transient errors retry with exponential backoff (capped
     max_sleep). Non-transient errors propagate immediately.
 
-    Transient = rate limits (429 / RESOURCE_EXHAUSTED) and server errors
-    (500/503 / UNAVAILABLE). Auth expiry (401 / UNAUTHENTICATED) is treated as
-    transient ONLY when `refresh_auth` is supplied — it is invoked before the
-    next attempt so a stale bearer token can be re-minted (Model Garden). For
-    backends with non-expiring auth, pass refresh_auth=None and 401 propagates.
+    Transient = rate limits (429 / RESOURCE_EXHAUSTED), server errors
+    (500/503 / UNAVAILABLE), and connection-level failures (dropped/reset
+    connections, read timeouts) — these are common on long runs against a remote
+    endpoint and must be ridden out, not fatal. Auth expiry (401 /
+    UNAUTHENTICATED) is treated as transient ONLY when `refresh_auth` is supplied
+    — it is invoked before the next attempt so a stale bearer token can be
+    re-minted (Model Garden). For backends with non-expiring auth, pass
+    refresh_auth=None and 401 propagates.
     """
     last: Exception | None = None
     for i in range(attempts):
@@ -93,11 +96,25 @@ def retry_transient(
             msg = str(e)
             code = getattr(e, "status_code", None) or getattr(e, "code", None)
             is_auth = "401" in msg or code == 401 or "UNAUTHENTICATED" in msg
+            # Connection-level errors carry no HTTP code — match by exception
+            # class name + message so we stay dependency-free (no requests import).
+            name = type(e).__name__
+            is_conn = (
+                name in ("ConnectionError", "Timeout", "ReadTimeout",
+                         "ConnectTimeout", "ConnectionResetError",
+                         "ProtocolError", "RemoteDisconnected",
+                         "ChunkedEncodingError")
+                or "Connection aborted" in msg or "RemoteDisconnected" in msg
+                or "Connection reset" in msg or "timed out" in msg
+                or "Max retries exceeded" in msg
+                or "Connection refused" in msg
+            )
             transient = (
                 "429" in msg or "RESOURCE_EXHAUSTED" in msg
                 or "503" in msg or "500" in msg or "UNAVAILABLE" in msg
                 or (isinstance(code, int) and code in (429, 500, 503))
                 or (is_auth and refresh_auth is not None)
+                or is_conn
             )
             if not transient:
                 raise

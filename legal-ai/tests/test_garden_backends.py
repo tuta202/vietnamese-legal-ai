@@ -39,6 +39,7 @@ def garden_cfg() -> RetrievalConfig:
     cfg.qdrant.host = "localhost"
     cfg.qdrant.collection = "legal_vn_garden"
     cfg.garden.embed_endpoint_id = "111"
+    cfg.garden.embed_dns = "111.region-proj.prediction.vertexai.goog"
     cfg.garden.llm_endpoint_id = "222"
     cfg.garden.project_id = "proj"
     return cfg
@@ -119,7 +120,9 @@ class TestConfigFileLoads:
         cfg = load_config(_CONFIG_GARDEN)
         assert cfg.backend == "garden"
         assert cfg.garden.embed_model == "Qwen3-Embedding-8B"
-        assert cfg.garden.llm_model == "gemma-3-12b-it"
+        assert cfg.garden.llm_model == "google/gemma-3-12b-it"
+        assert cfg.garden.embed_region == "asia-northeast1"
+        assert cfg.garden.region == "asia-southeast1"
         assert cfg.embedding.dimension == 4096
         assert cfg.qdrant.vector_size == 4096
         assert cfg.qdrant.collection == "legal_vn_garden"
