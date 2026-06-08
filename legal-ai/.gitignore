@@ -3,6 +3,8 @@
 
 # Eval / pipeline output
 results*.json
+scores_detail*.jsonl
+outputs/
 submission/
 *.zip
 eval/data/eval_predictions.json

@@ -321,6 +321,7 @@ class GardenReranker(LegalReranker):
 # ---------------------------------------------------------------------------
 
 _CE_SNIPPET = 1000   # chars of article content sent to the cross-encoder per item
+_CE_MAX_BATCH = 32   # TEI rerank endpoint cap (texts per :predict call; 80 → HTTP 413)
 
 
 class GardenCrossEncoderReranker(LegalReranker):
@@ -367,44 +368,47 @@ class GardenCrossEncoderReranker(LegalReranker):
             f"https://{g.ce_dns}/v1/projects/{g.project_id}/"
             f"locations/{region}/endpoints/{g.ce_endpoint_id}:predict"
         )
-        body = {
-            "instances": [{
-                "query": question,                                 # ORIGINAL query
-                "texts": [self._doc_text(c) for c in candidates],
-            }]
-        }
-
-        def call():
-            import requests  # lazy
-            resp = requests.post(
-                url,
-                headers={"Authorization": f"Bearer {_gcp_token()}"},
-                json=body,
-                timeout=g.timeout,
-            )
-            if resp.status_code != 200:
-                raise RerankError(f"rerank {resp.status_code}: {resp.text[:200]}")
-            preds = resp.json().get("predictions")
-            if not preds:
-                raise RerankError("rerank returned no predictions")
-            return preds[0]   # the single instance's [{"index": i, "score": s}, ...]
-
-        try:
-            data = _garden_retry(call, g.max_retries + 2)
-        except RerankError:
-            raise
-        except Exception as e:
-            raise RerankError(f"garden cross-encoder failed: {e}") from e
-
-        # Predictions are [{"index": i, "score": s}, ...] (sorted); realign to input.
+        texts = [self._doc_text(c) for c in candidates]
         scores = [0.0] * len(candidates)
-        for item in data if isinstance(data, list) else []:
+
+        # The endpoint caps texts per call (_CE_MAX_BATCH). Cross-encoder scores
+        # are INDEPENDENT per (query, doc) pair, so chunking is calibration-safe:
+        # a score from one chunk is directly comparable to another (unlike the
+        # tier-2 LLM, which must see the whole pool in one call). Returned indices
+        # are local to each chunk → offset by the chunk start.
+        for start in range(0, len(texts), _CE_MAX_BATCH):
+            chunk = texts[start:start + _CE_MAX_BATCH]
+            body = {"instances": [{"query": question, "texts": chunk}]}  # ORIGINAL query
+
+            def call(_body=body):
+                import requests  # lazy
+                resp = requests.post(
+                    url,
+                    headers={"Authorization": f"Bearer {_gcp_token()}"},
+                    json=_body,
+                    timeout=g.timeout,
+                )
+                if resp.status_code != 200:
+                    raise RerankError(f"rerank {resp.status_code}: {resp.text[:200]}")
+                preds = resp.json().get("predictions")
+                if not preds:
+                    raise RerankError("rerank returned no predictions")
+                return preds[0]   # this instance's [{"index": i, "score": s}, ...]
+
             try:
-                idx = int(item["index"])
-                if 0 <= idx < len(candidates):
-                    scores[idx] = float(item["score"])
-            except (KeyError, TypeError, ValueError):
-                continue
+                data = _garden_retry(call, g.max_retries + 2)
+            except RerankError:
+                raise
+            except Exception as e:
+                raise RerankError(f"garden cross-encoder failed: {e}") from e
+
+            for item in data if isinstance(data, list) else []:
+                try:
+                    idx = int(item["index"])
+                    if 0 <= idx < len(chunk):
+                        scores[start + idx] = float(item["score"])
+                except (KeyError, TypeError, ValueError):
+                    continue
         return scores
 
 
@@ -450,6 +454,18 @@ class GardenCoTReranker(GardenReranker):
             log.warning("CoT rerank parse failed — preserving tier-1 order")
         return scores
 
+    def score_and_sort(self, question: str, candidates: list[dict]) -> list[dict]:
+        """
+        ALL candidates sorted desc by CoT score, each dict carrying its 'cot_score'
+        (uses the inherited whole-pool _score — one LLM call; a parse failure
+        preserves input/tier-1 order). Used to capture the full tier-2 detail.
+        """
+        if not candidates:
+            return []
+        scores = self._score(question, candidates)
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        return [{**c, "cot_score": float(s)} for s, c in ranked]
+
 
 # ---------------------------------------------------------------------------
 # Composite two-tier reranker (presents the standard reranker interface)
@@ -474,15 +490,33 @@ class GardenTwoTierReranker:
 
     def rerank(self, question: str, candidates: list[dict],
                top_k: int | None = None) -> list[dict]:
+        final, _ = self.rerank_detailed(question, candidates, top_k=top_k)
+        return final
+
+    def rerank_detailed(self, question: str, candidates: list[dict],
+                        top_k: int | None = None) -> tuple[list[dict], dict]:
+        """
+        Same funnel as rerank() but also returns a `detail` dict with the FULL
+        scored intermediate pools (for offline threshold sweeping) — at NO extra
+        endpoint cost: tier 1 already scores every candidate and tier 2 scores the
+        whole shortlist, so we just keep the full sorted lists instead of slicing
+        early. detail = {"bge_candidates": <all, ce_score>, "cot_candidates":
+        <all shortlist, cot_score>}; both sorted desc.
+        """
         if not candidates:
-            return []
+            return [], {"bge_candidates": [], "cot_candidates": []}
         k_final = top_k if top_k is not None else self.config.retrieval.top_k_rerank
-        tier1 = self.ce.rerank(
-            question, candidates, top_k=self.config.retrieval.top_k_rerank_ce
-        )
-        if self.config.reranker.cot_enabled:
-            return self.cot.rerank(question, tier1, top_k=k_final)
-        return tier1[:k_final]
+        k_ce = self.config.retrieval.top_k_rerank_ce
+        # Tier 1: score ALL candidates, keep the whole sorted list (ce_score on each).
+        bge_all = self.ce.rerank(question, candidates, top_k=len(candidates))
+        tier1 = bge_all[:k_ce]
+        if self.config.reranker.cot_enabled and not self.mock:
+            cot_all = self.cot.score_and_sort(question, tier1)   # all of tier1, cot_score
+            final = cot_all[:k_final]
+        else:
+            cot_all = []   # mock / cot disabled → no tier-2 layer
+            final = tier1[:k_final]
+        return final, {"bge_candidates": bge_all, "cot_candidates": cot_all}
 
 
 # ---------------------------------------------------------------------------

@@ -51,6 +51,10 @@ def main() -> None:
     ap.add_argument("--resume", action="store_true",
                     help="reuse completed entries from an existing --output file "
                          "and only process the missing/fallback ones")
+    ap.add_argument("--scores-detail", default=None,
+                    help="path for the per-question scored-pool JSONL "
+                         "(default: scores_detail.jsonl next to --output). Only "
+                         "written when the backend reranker supports it (garden).")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -85,8 +89,28 @@ def main() -> None:
 
     pipeline = LegalAIPipeline(config_path=args.config, mock=False)
 
-    def _work(q: dict) -> dict:
-        return pipeline.process_question(q["id"], q["question"])
+    # Scored-pool detail JSONL (for offline threshold sweeping). Only emitted when
+    # the reranker exposes detail (garden 2-tier). Append-safe; a separate lock so
+    # it never nests inside the results lock.
+    detail_path = Path(args.scores_detail) if args.scores_detail \
+        else out.with_name("scores_detail.jsonl")
+    write_detail = hasattr(pipeline._reranker, "rerank_detailed")
+    detail_lock = threading.Lock()
+    if write_detail and not (args.resume and detail_path.exists()):
+        detail_path.parent.mkdir(parents=True, exist_ok=True)
+        detail_path.write_text("", encoding="utf-8")   # fresh run → truncate
+
+    def _emit_detail(detail: dict | None) -> None:
+        if not (write_detail and detail):
+            return
+        with detail_lock:
+            with detail_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(detail, ensure_ascii=False) + "\n")
+
+    def _work(q: dict) -> tuple[dict, dict | None]:
+        if write_detail:
+            return pipeline.process_question_detailed(q["id"], q["question"])
+        return pipeline.process_question(q["id"], q["question"]), None
 
     t0 = time.time()
     if not todo:
@@ -97,7 +121,9 @@ def main() -> None:
     # Warm up lazy clients single-threaded on the first pending question, so
     # concurrent threads never race the lazy-init.
     first = todo[0]
-    results[first["id"]] = pipeline.process_question(first["id"], first["question"])
+    entry, detail = _work(first)
+    results[first["id"]] = entry
+    _emit_detail(detail)
     log.info("Warmup question done in %.1fs (clients initialised)", time.time() - t0)
     _persist()
 
@@ -106,9 +132,10 @@ def main() -> None:
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(_work, q): q["id"] for q in rest}
         for fut in as_completed(futures):
-            r = fut.result()
+            entry, detail = fut.result()
+            _emit_detail(detail)           # own lock, outside the results lock
             with lock:
-                results[r["id"]] = r
+                results[entry["id"]] = entry
                 processed += 1
                 if processed % 50 == 0 or processed == len(todo):
                     rate = processed / (time.time() - t0)
@@ -128,8 +155,9 @@ def main() -> None:
         log.info("Retry round %d: %d straggler(s) at %d workers…",
                  rnd, len(failed), retry_workers)
         with ThreadPoolExecutor(max_workers=retry_workers) as ex:
-            for r in ex.map(_work, failed):
-                results[r["id"]] = r
+            for entry, detail in ex.map(_work, failed):
+                _emit_detail(detail)
+                results[entry["id"]] = entry
         _persist()
     still = sum(1 for q in questions if not results.get(q["id"], {}).get("relevant_articles"))
     if still:

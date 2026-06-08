@@ -238,20 +238,26 @@ class TestTwoTier:
         rr = GardenTwoTierReranker(garden_cfg, mock=False)
         calls = []
 
-        def fake_ce(q, c, top_k=None):
+        def fake_ce(q, c, top_k=None):           # tier 1 scores ALL, slice later
             calls.append(("ce", top_k))
-            return c[:top_k]
+            return [{**x, "ce_score": 1.0} for x in c[:top_k]]
 
-        def fake_cot(q, c, top_k=None):
-            calls.append(("cot", top_k, len(c)))
-            return c[:top_k]
+        def fake_cot_sort(q, c):                  # tier 2 scores the whole shortlist
+            calls.append(("cot_sort", len(c)))
+            return [{**x, "cot_score": 5.0} for x in c]
 
         monkeypatch.setattr(rr.ce, "rerank", fake_ce)
-        monkeypatch.setattr(rr.cot, "rerank", fake_cot)
-        out = rr.rerank("q", _CANDIDATES, top_k=1)
-        assert calls[0] == ("ce", 2)          # tier 1 → top_k_rerank_ce
-        assert calls[1] == ("cot", 1, 2)      # tier 2 → final, fed tier-1's 2
-        assert len(out) == 1
+        monkeypatch.setattr(rr.cot, "score_and_sort", fake_cot_sort)
+        final, detail = rr.rerank_detailed("q", _CANDIDATES, top_k=1)
+        assert calls[0] == ("ce", len(_CANDIDATES))     # tier 1 scores the full pool
+        assert calls[1] == ("cot_sort", 2)              # tier 2 over the k_ce shortlist
+        assert len(final) == 1
+        assert len(detail["bge_candidates"]) == len(_CANDIDATES)   # full pool kept
+        assert len(detail["cot_candidates"]) == 2
+        assert "ce_score" in detail["bge_candidates"][0]
+        assert "cot_score" in detail["cot_candidates"][0]
+        # rerank() delegates to rerank_detailed() and returns just the final list
+        assert rr.rerank("q", _CANDIDATES, top_k=1) == final
 
     def test_cot_disabled_uses_ce_order(self, garden_cfg, monkeypatch):
         garden_cfg.reranker.cot_enabled = False
@@ -263,6 +269,27 @@ class TestTwoTier:
 
     def test_empty_candidates(self, garden_cfg):
         assert GardenTwoTierReranker(garden_cfg, mock=True).rerank("q", [], top_k=5) == []
+
+    def test_detail_record_mapping(self):
+        from pipeline import LegalAIPipeline, PipelineState
+        st = PipelineState(question_id=7, question="Q")
+        st.rerank_detail = {
+            "bge_candidates": [{"relevant_article_str": "A|N|Điều 1",
+                                "relevant_doc_str": "A|N", "dieu_number": "Điều 1",
+                                "dieu_title": "T", "ce_score": 0.9}],
+            "cot_candidates": [{"relevant_article_str": "A|N|Điều 1",
+                                "relevant_doc_str": "A|N", "dieu_number": "Điều 1",
+                                "dieu_title": "T", "cot_score": 8}],
+        }
+        st.submission_entry = {"relevant_articles": ["A|N|Điều 1"]}
+        rec = LegalAIPipeline._detail_record(st)
+        assert rec["id"] == 7 and rec["question"] == "Q"
+        assert rec["bge_candidates"][0] == {
+            "article_id": "A|N|Điều 1", "doc_name": "A|N",
+            "article_title": "Điều 1 T", "ce_score": 0.9,
+        }
+        assert rec["cot_candidates"][0]["cot_score"] == 8.0
+        assert rec["final"] == ["A|N|Điều 1"]
 
 
 class TestConfigFileLoads:

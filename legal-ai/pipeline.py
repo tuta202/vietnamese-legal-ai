@@ -59,6 +59,7 @@ class PipelineState:
     reranked_results:  list      = field(default_factory=list)
     answer:            str       = ""
     submission_entry:  dict      = field(default_factory=dict)
+    rerank_detail:     dict      = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -183,12 +184,21 @@ class LegalAIPipeline:
         return state
 
     def step_rerank(self, state: PipelineState) -> PipelineState:
-        """Step 3: neural reranking of fused candidates."""
-        state.reranked_results = self._reranker.rerank(
-            state.question,
-            state.fused_results,
-            top_k=self.config.retrieval.top_k_rerank,
-        )
+        """Step 3: neural reranking of fused candidates.
+
+        If the backend reranker exposes rerank_detailed (garden 2-tier), capture
+        the full scored intermediate pools into state.rerank_detail (for offline
+        threshold sweeping) — same endpoint cost, just keeps more of the scores.
+        """
+        top_k = self.config.retrieval.top_k_rerank
+        if hasattr(self._reranker, "rerank_detailed"):
+            state.reranked_results, state.rerank_detail = self._reranker.rerank_detailed(
+                state.question, state.fused_results, top_k=top_k
+            )
+        else:
+            state.reranked_results = self._reranker.rerank(
+                state.question, state.fused_results, top_k=top_k
+            )
         log.debug("Reranked to %d articles", len(state.reranked_results))
         return state
 
@@ -230,6 +240,31 @@ class LegalAIPipeline:
     # Orchestrators
     # ------------------------------------------------------------------
 
+    def _process_to_state(self, q_id: int | str, question: str) -> PipelineState:
+        """Run all five steps, returning the enriched state (raises on failure)."""
+        state = PipelineState(question_id=q_id, question=question)
+        state = self.step_rewrite(state)
+        state = self.step_retrieve(state)
+        state = self.step_rerank(state)
+        state = self.step_generate(state)
+        state = self.step_format(state)
+
+        # Self-validate
+        mentions = self._generator.extract_dieu_mentions(state.answer)
+        if not mentions:
+            log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
+        return state
+
+    @staticmethod
+    def _fallback_entry(q_id: int | str, question: str) -> dict:
+        return {
+            "id":                q_id,
+            "question":          question,
+            "answer":            _DISCLAIMER,
+            "relevant_docs":     [],
+            "relevant_articles": [],
+        }
+
     def process_question(self, q_id: int | str, question: str) -> dict:
         """
         Run the full pipeline for a single question. Returns a submission dict.
@@ -238,28 +273,53 @@ class LegalAIPipeline:
         fallback entry is returned so one bad question never aborts the batch.
         """
         try:
-            state = PipelineState(question_id=q_id, question=question)
-            state = self.step_rewrite(state)
-            state = self.step_retrieve(state)
-            state = self.step_rerank(state)
-            state = self.step_generate(state)
-            state = self.step_format(state)
-
-            # Self-validate
-            mentions = self._generator.extract_dieu_mentions(state.answer)
-            if not mentions:
-                log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
-
-            return state.submission_entry
+            return self._process_to_state(q_id, question).submission_entry
         except Exception:
             log.exception("Q%s failed — emitting fallback entry", q_id)
-            return {
-                "id":                q_id,
-                "question":          question,
-                "answer":            _DISCLAIMER,
-                "relevant_docs":     [],
-                "relevant_articles": [],
+            return self._fallback_entry(q_id, question)
+
+    def process_question_detailed(
+        self, q_id: int | str, question: str
+    ) -> tuple[dict, dict]:
+        """
+        Like process_question but ALSO returns a scores-detail record capturing the
+        full BGE + CoT scored pools (for offline threshold sweeping). The record is
+        derived from the per-question state, so it is thread-safe under concurrency.
+        """
+        try:
+            state = self._process_to_state(q_id, question)
+            return state.submission_entry, self._detail_record(state)
+        except Exception:
+            log.exception("Q%s failed — emitting fallback entry", q_id)
+            entry = self._fallback_entry(q_id, question)
+            return entry, {
+                "id": q_id, "question": question,
+                "bge_candidates": [], "cot_candidates": [], "final": [],
             }
+
+    @staticmethod
+    def _detail_record(state: PipelineState) -> dict:
+        """Build the scores_detail.jsonl line from a completed state."""
+        def fmt(cands: list[dict], score_key: str) -> list[dict]:
+            rows = []
+            for c in cands:
+                rows.append({
+                    # article_id IS the citation key ("mã|tên|Điều X") used in final
+                    "article_id":    c.get("relevant_article_str", ""),
+                    "doc_name":      c.get("relevant_doc_str", ""),
+                    "article_title": f'{c.get("dieu_number", "")} {c.get("dieu_title", "")}'.strip(),
+                    score_key:       round(float(c.get(score_key, 0.0)), 6),
+                })
+            return rows
+
+        d = state.rerank_detail or {}
+        return {
+            "id":             state.question_id,
+            "question":       state.question,
+            "bge_candidates": fmt(d.get("bge_candidates", []), "ce_score"),
+            "cot_candidates": fmt(d.get("cot_candidates", []), "cot_score"),
+            "final":          state.submission_entry.get("relevant_articles", []),
+        }
 
     def process_questions(self, questions: list[dict]) -> list[dict]:
         """Process a list of {id, question} dicts."""
