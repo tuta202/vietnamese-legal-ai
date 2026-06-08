@@ -38,18 +38,10 @@ def strip_code_fences(raw: str) -> str:
     return raw.strip()
 
 
-def parse_rerank_scores(raw: str) -> dict[int, float] | None:
-    """
-    Parse an LLM rerank response into {candidate_index: score}.
-    Tolerates code fences and surrounding prose. Returns None on any failure so
-    callers can fall back to retrieval order.
-    """
-    cleaned = strip_code_fences(raw)
-    m = re.search(r"\[.*\]", cleaned, flags=re.DOTALL)
-    if m:
-        cleaned = m.group(0)
+def _scores_from_array(text: str) -> dict[int, float] | None:
+    """json.loads `text` and pull {index: score} pairs; None if not a usable array."""
     try:
-        data = json.loads(cleaned)
+        data = json.loads(text)
     except (json.JSONDecodeError, TypeError):
         return None
     if not isinstance(data, list):
@@ -61,6 +53,71 @@ def parse_rerank_scores(raw: str) -> dict[int, float] | None:
         except (KeyError, TypeError, ValueError):
             continue
     return out or None
+
+
+def parse_rerank_scores(raw: str) -> dict[int, float] | None:
+    """
+    Parse an LLM rerank response into {candidate_index: score}.
+    Tolerates code fences and surrounding prose. Returns None on any failure so
+    callers can fall back to retrieval order.
+
+    Reasoning-tolerant (chain-of-thought rerank): a CoT response may emit prose
+    AND bracketed candidate markers like "[0] …", "[3] …" before the final score
+    array. Our score array uses objects ({…}), so it never nests brackets — scan
+    every bracket-delimited span that contains no nested bracket and take the LAST
+    one that parses into index/score pairs. Falls back to the old greedy
+    outermost-array match for arrays that legitimately contain brackets.
+    """
+    cleaned = strip_code_fences(raw)
+    spans = re.findall(r"\[[^\[\]]*\]", cleaned, flags=re.DOTALL)
+    for span in reversed(spans):
+        scores = _scores_from_array(span)
+        if scores:
+            return scores
+    m = re.search(r"\[.*\]", cleaned, flags=re.DOTALL)
+    if m:
+        return _scores_from_array(m.group(0))
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Chain-of-thought rerank prompt (tier-2 collective LLM reranking)
+# ---------------------------------------------------------------------------
+
+RERANK_COT_SYSTEM = (
+    "Bạn là chuyên gia pháp luật Việt Nam. Đánh giá mức độ liên quan của từng "
+    "điều luật với câu hỏi bằng suy luận từng bước, không chỉ dựa trên trùng từ "
+    "khóa bề mặt."
+)
+
+
+def format_cot_rerank_user(
+    question: str, candidates: list[dict], snippet: int = RERANK_SNIPPET
+) -> str:
+    """
+    Build the tier-2 CoT rerank user prompt: question + 0-indexed candidate list +
+    a step-by-step reasoning scaffold, ending with a JSON-array-only instruction.
+    Indices are 0-based to match parse_rerank_scores / candidate positions.
+    """
+    blocks = [f"Câu hỏi: {question}", "", "Các điều luật ứng viên:"]
+    for i, c in enumerate(candidates):
+        blocks.append(
+            f"[{i}] {c.get('dieu_number', '')} {c.get('dieu_title', '')}\n"
+            f"{c.get('content', '')[:snippet]}"
+        )
+    blocks.append(
+        "\nSuy luận:\n"
+        "1. Yếu tố pháp lý cốt lõi của câu hỏi là gì? (thực thể, hành vi, quan hệ "
+        "pháp lý, luật được viện dẫn)\n"
+        "2. Với mỗi điều: nó giải quyết TRỰC TIẾP yếu tố ở bước 1, hay chỉ liên "
+        "quan bề mặt (trùng từ / trùng số điều)? Có quan hệ với điều khác không "
+        "(ngoại lệ, viện dẫn lẫn nhau)?\n"
+        "3. Điều nào THỰC SỰ cần để trả lời, điều nào dư thừa?\n\n"
+        "Kết luận: ở DÒNG CUỐI chỉ trả về MỘT mảng JSON (không giải thích thêm), "
+        'định dạng [{"index": 0, "score": 9}, {"index": 1, "score": 3}] — index là '
+        "số trong ngoặc vuông ở trên, score từ 0 đến 10."
+    )
+    return "\n".join(blocks)
 
 
 # ---------------------------------------------------------------------------

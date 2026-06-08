@@ -28,11 +28,15 @@ them. Shared, provider-agnostic helpers come from backends_common.
 """
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from backends_common import (
+    RERANK_COT_SYSTEM,
     RERANK_SNIPPET,
     RERANK_SYSTEM,
+    format_cot_rerank_user,
     parse_rerank_scores,
     retry_transient,
 )
@@ -41,6 +45,8 @@ from retrieval.config import GardenConfig, RetrievalConfig
 from retrieval.embedder import LegalEmbedder
 from retrieval.query_rewriter import QueryRewriter
 from retrieval.reranker import LegalReranker
+
+log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -311,17 +317,188 @@ class GardenReranker(LegalReranker):
 
 
 # ---------------------------------------------------------------------------
+# TIER 1 — BGE cross-encoder reranker (TEI /rerank)
+# ---------------------------------------------------------------------------
+
+_CE_SNIPPET = 1000   # chars of article content sent to the cross-encoder per item
+
+
+class GardenCrossEncoderReranker(LegalReranker):
+    """
+    TIER 1 — BAAI/bge-reranker-v2-m3 cross-encoder on a Garden TEI dedicated
+    endpoint (:predict route). Each (query, doc) pair is scored INDEPENDENTLY (no context dilution
+    or position bias), so it handles the full fused pool well. Uses the ORIGINAL
+    query. On endpoint failure it raises RerankError — NO silent fallback: the
+    cross-encoder is the main precision gate, so a failure must surface.
+    """
+
+    def rerank(self, question: str, candidates: list[dict],
+               top_k: int | None = None) -> list[dict]:
+        k = top_k if top_k is not None else self.config.retrieval.top_k_rerank_ce
+        if not candidates:
+            return []
+        if self.mock:
+            return candidates[:k]
+        scores = self._ce_scores(question, candidates)
+        ranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+        return [{**c, "ce_score": float(s)} for s, c in ranked[:k]]
+
+    @staticmethod
+    def _doc_text(c: dict) -> str:
+        return (
+            f"{c.get('dieu_number', '')} {c.get('dieu_title', '')}\n"
+            f"{c.get('content', '')[:_CE_SNIPPET]}"
+        )
+
+    def _ce_scores(self, question: str, candidates: list[dict]) -> list[float]:
+        """
+        Score via the Vertex dedicated-endpoint :predict route (TEI rerank), NOT a
+        native /rerank path — verified against the live endpoint: /rerank returns
+        404/UNIMPLEMENTED, while :predict with ONE instance of {query, texts}
+        works. Shape (verified):
+            POST https://{ce_dns}/v1/projects/{proj}/locations/{region}/
+                 endpoints/{id}:predict
+            body  {"instances": [{"query": "<q>", "texts": ["<d0>", "<d1>", ...]}]}
+            resp  {"predictions": [[{"index": i, "score": s}, ...]]}  # sorted desc
+        """
+        g = self.config.garden
+        region = g.ce_region or g.region   # rerank may live in another region
+        url = (
+            f"https://{g.ce_dns}/v1/projects/{g.project_id}/"
+            f"locations/{region}/endpoints/{g.ce_endpoint_id}:predict"
+        )
+        body = {
+            "instances": [{
+                "query": question,                                 # ORIGINAL query
+                "texts": [self._doc_text(c) for c in candidates],
+            }]
+        }
+
+        def call():
+            import requests  # lazy
+            resp = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {_gcp_token()}"},
+                json=body,
+                timeout=g.timeout,
+            )
+            if resp.status_code != 200:
+                raise RerankError(f"rerank {resp.status_code}: {resp.text[:200]}")
+            preds = resp.json().get("predictions")
+            if not preds:
+                raise RerankError("rerank returned no predictions")
+            return preds[0]   # the single instance's [{"index": i, "score": s}, ...]
+
+        try:
+            data = _garden_retry(call, g.max_retries + 2)
+        except RerankError:
+            raise
+        except Exception as e:
+            raise RerankError(f"garden cross-encoder failed: {e}") from e
+
+        # Predictions are [{"index": i, "score": s}, ...] (sorted); realign to input.
+        scores = [0.0] * len(candidates)
+        for item in data if isinstance(data, list) else []:
+            try:
+                idx = int(item["index"])
+                if 0 <= idx < len(candidates):
+                    scores[idx] = float(item["score"])
+            except (KeyError, TypeError, ValueError):
+                continue
+        return scores
+
+
+# ---------------------------------------------------------------------------
+# TIER 2 — LLM chain-of-thought collective reranker
+# ---------------------------------------------------------------------------
+
+class GardenCoTReranker(GardenReranker):
+    """
+    TIER 2 — Gemma 3 collective chain-of-thought rerank over the (already
+    cross-encoder-filtered) shortlist. Reuses GardenReranker._score (whole-pool,
+    single call; on total failure it preserves input order = the tier-1 order)
+    and only swaps in the CoT prompt. Uses the ORIGINAL query. A parse failure
+    keeps the tier-1 order (acceptable: tier 1 is already a strong cross-encoder).
+    """
+
+    def _llm_scores(self, question: str, candidates: list[dict]) -> dict[int, float] | None:
+        g = self.config.garden
+        user = format_cot_rerank_user(question, candidates, snippet=RERANK_SNIPPET)
+
+        def call() -> str:
+            client = _garden_client(g, g.llm_endpoint_id)
+            resp = client.chat.completions.create(
+                model=g.llm_model,
+                messages=[
+                    {"role": "system", "content": RERANK_COT_SYSTEM},
+                    {"role": "user", "content": user},
+                ],
+                temperature=self.config.reranker.temperature,
+                # CoT reasoning + the final JSON array need more room than a bare
+                # score array; 15 items × reasoning fits comfortably.
+                max_tokens=2048,
+            )
+            return resp.choices[0].message.content or ""
+
+        try:
+            raw = _garden_retry(call, g.max_retries + 2)
+        except Exception:
+            log.warning("CoT rerank call failed — preserving tier-1 order")
+            return None
+        scores = parse_rerank_scores(raw)
+        if scores is None:
+            log.warning("CoT rerank parse failed — preserving tier-1 order")
+        return scores
+
+
+# ---------------------------------------------------------------------------
+# Composite two-tier reranker (presents the standard reranker interface)
+# ---------------------------------------------------------------------------
+
+class GardenTwoTierReranker:
+    """
+    Garden reranker = TIER 1 (BGE cross-encoder: fused pool → top_k_rerank_ce)
+    then TIER 2 (Gemma CoT: → top_k_rerank). Exposes the SAME
+    `rerank(question, candidates, top_k)` interface as LegalReranker so the
+    backend-agnostic pipeline stays unchanged — both tiers receive the ORIGINAL
+    question that the pipeline already passes to step_rerank (never the rewritten
+    query). If cot_enabled is False, the cross-encoder order is used directly.
+    """
+
+    def __init__(self, config: RetrievalConfig, mock: bool = False) -> None:
+        self.config = config
+        self.mock = mock
+        self._model = None   # duck-type parity with LegalReranker (lazy-init checks)
+        self.ce = GardenCrossEncoderReranker(config, mock=mock)
+        self.cot = GardenCoTReranker(config, mock=mock)
+
+    def rerank(self, question: str, candidates: list[dict],
+               top_k: int | None = None) -> list[dict]:
+        if not candidates:
+            return []
+        k_final = top_k if top_k is not None else self.config.retrieval.top_k_rerank
+        tier1 = self.ce.rerank(
+            question, candidates, top_k=self.config.retrieval.top_k_rerank_ce
+        )
+        if self.config.reranker.cot_enabled:
+            return self.cot.rerank(question, tier1, top_k=k_final)
+        return tier1[:k_final]
+
+
+# ---------------------------------------------------------------------------
 # Factory — codebase-native equivalent of the TIP's create_backends()
 # ---------------------------------------------------------------------------
 
 def make_garden_components(config: RetrievalConfig, mock: bool = False):
     """
-    Build (embedder, rewriter, reranker, generator) — all PURE Garden. Returns
-    the same 4-component tuple shape the pipeline's other backends use.
+    Build (embedder, rewriter, reranker, generator) — all PURE Garden. The
+    reranker is the two-tier composite (BGE cross-encoder → Gemma CoT). Returns
+    the same 4-component tuple shape the pipeline's other backends use, so the
+    pipeline wiring is identical across backends.
     """
     return (
         GardenEmbedder(config, dry_run=mock),
         GardenQueryRewriter(config, mock=mock),
-        GardenReranker(config, mock=mock),
+        GardenTwoTierReranker(config, mock=mock),
         GardenGenerator(config, mock=mock),
     )

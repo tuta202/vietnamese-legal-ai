@@ -55,14 +55,27 @@ class ModelsConfig:
 @dataclass
 class EmbeddingConfig:
     dimension: int = 4096
+    # Gemini-style task hints — used ONLY by the vertex_ai backend (Gemini embed).
+    # Qwen3/TEI ignore them (Qwen3 uses query_instruction below instead).
     task_type: str = "RETRIEVAL_DOCUMENT"
     query_task_type: str = "RETRIEVAL_QUERY"
+    # Qwen3-Embedding asymmetric prefix: the QUERY side is wrapped as
+    # "Instruct: {query_instruction}\nQuery: {text}"; documents are embedded RAW.
+    # Changing this only affects query vectors (computed at run time), so it never
+    # requires a corpus re-embed.
+    query_instruction: str = (
+        "Given a legal question in Vietnamese, retrieve the most relevant law "
+        "articles that answer it"
+    )
     batch_size: int = 32
 
 
 @dataclass
 class RerankerConfig:
     temperature: float = 0.0
+    # Garden two-tier rerank: enable the tier-2 LLM chain-of-thought pass after
+    # the tier-1 cross-encoder. False → use the cross-encoder order directly.
+    cot_enabled: bool = True
 
 
 @dataclass
@@ -74,6 +87,7 @@ class RetrievalParams:
     top_k_dense: int = 50
     top_k_bm25: int = 50
     top_k_fusion: int = 40
+    top_k_rerank_ce: int = 15   # tier-1 cross-encoder output → tier-2 LLM CoT (garden)
     top_k_rerank: int = 7
     rrf_k: int = 60
 
@@ -104,10 +118,18 @@ class GardenConfig:
     embed_model: str = "Qwen3-Embedding-8B"
     embed_dns: str = ""   # dedicated domain, e.g. <id>.<region>-<proj#>.prediction.vertexai.goog
     embed_region: str = ""   # region of the embed endpoint; falls back to `region` if empty
-    # LLM + reranker endpoint (Gemma 3 12B-it — same endpoint, two roles).
+    # LLM + tier-2 CoT reranker endpoint (Gemma 3 12B-it — same endpoint, two roles).
     llm_endpoint_id: str = ""
     llm_model: str = "google/gemma-3-12b-it"
     llm_dns: str = ""   # dedicated domain for the LLM endpoint; empty → shared aiplatform domain
+    # TIER-1 cross-encoder reranker (BGE-reranker-v2-m3) — a SEPARATE Garden TEI
+    # endpoint, deployed like the embedder. Empty until the Homeowner deploys it;
+    # the two-tier rerank needs it live at RUN time, but build/load does NOT
+    # require it (so the config loads before the endpoint exists).
+    ce_endpoint_id: str = ""
+    ce_model: str = "BAAI/bge-reranker-v2-m3"
+    ce_dns: str = ""        # dedicated domain for the rerank endpoint (TEI :predict)
+    ce_region: str = ""     # region of the rerank endpoint; falls back to `region`
     # GCP project + the LLM endpoint's region (embed may live in another region;
     # see embed_region). The two endpoints can be in DIFFERENT regions.
     project_id: str = ""
@@ -265,3 +287,25 @@ def _validate_garden(cfg: RetrievalConfig, errors: list[str]) -> None:
             f"embedding.dimension ({cfg.embedding.dimension}) != "
             f"qdrant.vector_size ({cfg.qdrant.vector_size})"
         )
+
+    # Qwen3 asymmetric query prefix must be present (query-side instruction).
+    if not cfg.embedding.query_instruction:
+        errors.append(
+            "embedding.query_instruction empty — required for the Qwen3 query prefix"
+        )
+
+    # Two-tier rerank funnel must be monotonically narrowing:
+    #   top_k_fusion ≥ top_k_rerank_ce ≥ top_k_rerank
+    r = cfg.retrieval
+    if r.top_k_rerank_ce > r.top_k_fusion:
+        errors.append(
+            f"top_k_rerank_ce ({r.top_k_rerank_ce}) > top_k_fusion ({r.top_k_fusion})"
+        )
+    if r.top_k_rerank > r.top_k_rerank_ce:
+        errors.append(
+            f"top_k_rerank ({r.top_k_rerank}) > top_k_rerank_ce ({r.top_k_rerank_ce})"
+        )
+    # NOTE: ce_endpoint_id / ce_dns are intentionally NOT required here — the
+    # config must load before the BGE endpoint is deployed (build-only). A real
+    # two-tier run with cot_enabled needs them live; the cross-encoder raises a
+    # clear RerankError at call time if they are missing.

@@ -60,7 +60,11 @@ class LegalEmbedder:
     # ------------------------------------------------------------------
 
     def _format_query(self, text: str) -> str:
-        return f"Instruct: {_EMBED_INSTRUCTION}\nQuery: {text}"
+        # Qwen3 asymmetric prefix; instruction is config-driven (falls back to the
+        # module default for configs that predate the field). Documents are NOT
+        # prefixed (see _format_document) — query/document asymmetry is required.
+        instr = getattr(self.config.embedding, "query_instruction", "") or _EMBED_INSTRUCTION
+        return f"Instruct: {instr}\nQuery: {text}"
 
     def _format_document(self, article: dict) -> str:
         header = (

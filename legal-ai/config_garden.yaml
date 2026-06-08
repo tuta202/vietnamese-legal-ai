@@ -22,9 +22,16 @@ garden:
   embed_dns: ${GARDEN_EMBED_DNS}        # dedicated domain (TEI :predict, not OpenAI)
   embed_region: asia-northeast1
   # LLM (Gemma 3 12B-it) — dedicated OpenAI endpoint on A100 in asia-southeast1.
+  # Also serves the TIER-2 CoT reranker.
   llm_endpoint_id: ${GARDEN_LLM_ENDPOINT_ID}
   llm_model: google/gemma-3-12b-it      # exact vLLM served name (verified via probe)
   llm_dns: ${GARDEN_LLM_DNS}            # dedicated domain (OpenAI /chat/completions)
+  # TIER-1 cross-encoder (BGE-reranker-v2-m3) — separate TEI /rerank endpoint.
+  # Empty env → loads fine (build-only); must be live for a real two-tier run.
+  ce_endpoint_id: ${GARDEN_RERANK_ENDPOINT_ID}
+  ce_model: BAAI/bge-reranker-v2-m3
+  ce_dns: ${GARDEN_RERANK_DNS}          # dedicated domain (TEI :predict route)
+  ce_region: asia-northeast1            # BGE-reranker-v2-m3 deployed on L4 here
   project_id: ${GCP_PROJECT}
   region: asia-southeast1               # LLM region (embed is in embed_region above)
   max_retries: 3
@@ -32,23 +39,30 @@ garden:
 
 embedding:
   dimension: 4096                # Qwen3-Embedding-8B (must == qdrant.vector_size)
-  task_type: RETRIEVAL_DOCUMENT
-  query_task_type: RETRIEVAL_QUERY
+  # Qwen3-Embedding-8B: instruction-prefixed QUERY, documents embedded RAW
+  # (asymmetric). Only affects query vectors at run time → no corpus re-embed.
+  query_instruction: "Tìm kiếm điều luật pháp lý Việt Nam liên quan đến câu hỏi sau"
   batch_size: 32
+  # REMOVED task_type / query_task_type — those are Gemini-style hints, ignored
+  # by Qwen3 / TEI (kept as dataclass defaults for the vertex_ai backend).
 
 reranker:
+  cot_enabled: true   # TIER-2 LLM CoT pass after the cross-encoder
   temperature: 0.0
 
 retrieval:
-  top_k_dense: 50
-  top_k_bm25: 50
-  top_k_fusion: 40   # candidates sent to the LLM reranker
-  top_k_rerank: 5    # final cited articles — narrowed from 7 to tune precision
+  top_k_dense: 100        # widened from 50 — richer RRF pool, cheap
+  top_k_bm25: 100         # widened from 50
+  top_k_fusion: 80        # fused candidate pool → BGE cross-encoder (from 40)
+  top_k_rerank_ce: 15     # BGE output → LLM CoT (NEW)
+  top_k_rerank: 5         # final cited after CoT (threshold tuning in a later TIP)
   rrf_k: 60
 
 generator:
   temperature: 0.1
-  max_tokens: 3000   # Llama 3.1 output cap is 8192; 3000 avoids truncating
+  max_tokens: 3000   # Gemma 3 12B-it output cap is 8192; 3000 avoids truncating
                      # recall-heavy answers (matches config_vertex.yaml)
   top_p: 0.9
-  max_articles: 7
+  max_articles: 5    # context cap into the generate prompt; ALIGNED with
+                     # top_k_rerank=5 (final cited count is governed by
+                     # step_format = len(reranked_results) = top_k_rerank)
