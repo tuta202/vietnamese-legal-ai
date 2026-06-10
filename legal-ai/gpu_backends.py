@@ -1,18 +1,18 @@
 """
-garden_backends.py — Vertex AI Model Garden (open-source, competition-compliant)
+gpu_backends.py — self-deployed GPU endpoints (open-source, competition-compliant)
 implementations of the four neural components, as subclasses that override ONLY
 the model-call hook — exactly mirroring vertex_backends.py.
 
-This backend is PURE Garden: every component runs an open-source model served on
-a Vertex AI Online Endpoint. There is no Gemini fallback here — for the Gemini
-stack use `backend: vertex_ai` (config_vertex.yaml) instead. Clean separation:
+Every component runs an open-source model served on a self-deployed Vertex AI
+Online Endpoint (GPU). There is no Gemini fallback here — for the Gemini stack
+use `backend: vertex_ai` (config_vertex.yaml) instead. Clean separation:
   • vertex_ai → Gemini everywhere
-  • garden    → Garden everywhere
+  • gpu       → self-deployed open-source models everywhere
 
-  QueryRewriter   → GardenQueryRewriter   (overrides _chat_complete)
-  LegalGenerator  → GardenGenerator       (overrides _chat_complete)
-  LegalEmbedder   → GardenEmbedder        (overrides _encode_query/_encode_documents)
-  LegalReranker   → GardenReranker        (overrides _score)
+  QueryRewriter   → GpuQueryRewriter   (overrides _chat_complete)
+  LegalGenerator  → GpuGenerator       (overrides _chat_complete)
+  LegalEmbedder   → GpuEmbedder        (overrides _encode_query/_encode_documents)
+  LegalReranker   → GpuReranker        (overrides _score)
 
 Endpoints are OpenAI-compatible vLLM servers:
   • Embedder  : Qwen3-Embedding-8B  → 4096-dim vectors
@@ -31,13 +31,13 @@ from __future__ import annotations
 import numpy as np
 
 from backends_common import (
-    RERANK_SNIPPET,
     RERANK_SYSTEM,
+    build_rerank_blocks,
     parse_rerank_scores,
     retry_transient,
 )
 from generator.llm_generator import LegalGenerator
-from retrieval.config import GardenConfig, RetrievalConfig
+from retrieval.config import GpuConfig, RetrievalConfig
 from retrieval.embedder import LegalEmbedder
 from retrieval.query_rewriter import QueryRewriter
 from retrieval.reranker import LegalReranker
@@ -47,19 +47,19 @@ from retrieval.reranker import LegalReranker
 # Errors
 # ---------------------------------------------------------------------------
 
-class GardenError(Exception):
-    """Base error for the Model Garden backend."""
+class GpuError(Exception):
+    """Base error for the GPU endpoints backend."""
 
 
-class EmbeddingError(GardenError):
+class EmbeddingError(GpuError):
     """Raised when an embedding call fails after retries."""
 
 
-class GenerationError(GardenError):
+class GenerationError(GpuError):
     """Raised when a chat-completion call fails after retries."""
 
 
-class RerankError(GardenError):
+class RerankError(GpuError):
     """Raised when a rerank scoring call fails after retries."""
 
 
@@ -90,9 +90,9 @@ def _reset_creds() -> None:
     _creds = None
 
 
-def _garden_client(g: GardenConfig, endpoint_id: str):
+def _gpu_client(g: GpuConfig, endpoint_id: str):
     """
-    Build an OpenAI client for the Garden LLM endpoint. A *dedicated* endpoint
+    Build an OpenAI client for the Gpu LLM endpoint. A *dedicated* endpoint
     (llm_dns set) is only reachable on its own domain; a *standard* endpoint uses
     the shared aiplatform domain. Both expose OpenAI /chat/completions at
     .../endpoints/{id}.
@@ -107,8 +107,8 @@ def _garden_client(g: GardenConfig, endpoint_id: str):
     return OpenAI(base_url=base_url, api_key=_gcp_token(), timeout=g.timeout)
 
 
-def _garden_retry(fn, attempts: int):
-    """Garden retry: transient backoff + bearer-token refresh on 401."""
+def _gpu_retry(fn, attempts: int):
+    """Gpu retry: transient backoff + bearer-token refresh on 401."""
     return retry_transient(fn, attempts=attempts, base=4.0, refresh_auth=_reset_creds)
 
 
@@ -116,14 +116,14 @@ def _garden_retry(fn, attempts: int):
 # Query rewriter
 # ---------------------------------------------------------------------------
 
-class GardenQueryRewriter(QueryRewriter):
+class GpuQueryRewriter(QueryRewriter):
     """Gemma-backed query rewriter; inherits prompts, few-shots, JSON parsing."""
 
     def _chat_complete(self, messages: list[dict]) -> str:
-        g = self.config.garden
+        g = self.config.gpu
 
         def call() -> str:
-            client = _garden_client(g, g.llm_endpoint_id)
+            client = _gpu_client(g, g.llm_endpoint_id)
             resp = client.chat.completions.create(
                 model=g.llm_model,
                 messages=messages,
@@ -133,24 +133,24 @@ class GardenQueryRewriter(QueryRewriter):
             return resp.choices[0].message.content or ""
 
         try:
-            return _garden_retry(call, g.max_retries + 2)
+            return _gpu_retry(call, g.max_retries + 2)
         except Exception as e:
-            raise GenerationError(f"garden rewrite failed: {e}") from e
+            raise GenerationError(f"gpu rewrite failed: {e}") from e
 
 
 # ---------------------------------------------------------------------------
 # Answer generator
 # ---------------------------------------------------------------------------
 
-class GardenGenerator(LegalGenerator):
+class GpuGenerator(LegalGenerator):
     """Gemma-backed generator; inherits the PromptBuilder rules + mock answer."""
 
     def _chat_complete(self, system: str, user: str) -> str:
-        g = self.config.garden
+        g = self.config.gpu
         gen = self.config.generator
 
         def call() -> str:
-            client = _garden_client(g, g.llm_endpoint_id)
+            client = _gpu_client(g, g.llm_endpoint_id)
             resp = client.chat.completions.create(
                 model=g.llm_model,
                 messages=[
@@ -164,18 +164,18 @@ class GardenGenerator(LegalGenerator):
             return resp.choices[0].message.content or ""
 
         try:
-            return _garden_retry(call, g.max_retries + 2)
+            return _gpu_retry(call, g.max_retries + 2)
         except Exception as e:
-            raise GenerationError(f"garden generate failed: {e}") from e
+            raise GenerationError(f"gpu generate failed: {e}") from e
 
 
 # ---------------------------------------------------------------------------
 # Embedder
 # ---------------------------------------------------------------------------
 
-class GardenEmbedder(LegalEmbedder):
+class GpuEmbedder(LegalEmbedder):
     """
-    Qwen3-Embedding-8B backed embedder (OpenAI-compatible Garden endpoint).
+    Qwen3-Embedding-8B backed embedder (OpenAI-compatible Gpu endpoint).
     Inherits embed_query/embed_documents/embed_corpus; overrides only the encode
     hooks. `dim` comes from config.embedding.dimension (4096 for Qwen3). Queries
     keep the base "Instruct:" wrapper; documents are pre-formatted by the caller
@@ -192,7 +192,7 @@ class GardenEmbedder(LegalEmbedder):
             body  {"instances": [{"inputs": "<text>"}, ...]}
             resp  {"predictions": [[[...4096 floats...]], ...]}  # vector = pred[0]
         """
-        g = self.config.garden
+        g = self.config.gpu
         region = g.embed_region or g.region   # embed may live in another region
         url = (
             f"https://{g.embed_dns}/v1/projects/{g.project_id}/"
@@ -209,7 +209,7 @@ class GardenEmbedder(LegalEmbedder):
                 timeout=g.timeout,
             )
             if resp.status_code != 200:
-                # Surface the status code so _garden_retry can classify 401/429/5xx.
+                # Surface the status code so _gpu_retry can classify 401/429/5xx.
                 raise EmbeddingError(f"predict {resp.status_code}: {resp.text[:200]}")
             preds = resp.json().get("predictions")
             if not preds:
@@ -218,11 +218,11 @@ class GardenEmbedder(LegalEmbedder):
             return [p[0] if (p and isinstance(p[0], list)) else p for p in preds]
 
         try:
-            return _garden_retry(call, g.max_retries + 2)
+            return _gpu_retry(call, g.max_retries + 2)
         except EmbeddingError:
             raise
         except Exception as e:
-            raise EmbeddingError(f"garden embed failed: {e}") from e
+            raise EmbeddingError(f"gpu embed failed: {e}") from e
 
     @staticmethod
     def _l2_normalize(arr: np.ndarray) -> np.ndarray:
@@ -254,7 +254,7 @@ class GardenEmbedder(LegalEmbedder):
 _RERANK_BATCH = 100
 
 
-class GardenReranker(LegalReranker):
+class GpuReranker(LegalReranker):
     """
     LLM-based reranker (Gemma). Overrides only the scoring hook; rerank() (mock
     short-circuit + sort + truncate) is inherited unchanged. Scores the whole
@@ -280,21 +280,16 @@ class GardenReranker(LegalReranker):
         return [float(scores_map.get(i, 0.0)) for i in range(len(candidates))]
 
     def _llm_scores(self, question: str, candidates: list[dict]) -> dict[int, float] | None:
-        g = self.config.garden
-        blocks = [f"Câu hỏi: {question}", "", "Danh sách điều luật cần chấm điểm:"]
-        for i, c in enumerate(candidates):
-            blocks.append(
-                f"[{i}] {c.get('dieu_number', '')} {c.get('dieu_title', '')}\n"
-                f"{c.get('content', '')[:RERANK_SNIPPET]}"
-            )
+        g = self.config.gpu
+        user_msg = build_rerank_blocks(question, candidates)
 
         def call() -> str:
-            client = _garden_client(g, g.llm_endpoint_id)
+            client = _gpu_client(g, g.llm_endpoint_id)
             resp = client.chat.completions.create(
                 model=g.llm_model,
                 messages=[
                     {"role": "system", "content": RERANK_SYSTEM},
-                    {"role": "user", "content": "\n".join(blocks)},
+                    {"role": "user", "content": user_msg},
                 ],
                 temperature=self.config.reranker.temperature,
                 # Bound the JSON array. Whole-pool scoring (~40 items) needs more
@@ -304,7 +299,7 @@ class GardenReranker(LegalReranker):
             return resp.choices[0].message.content or ""
 
         try:
-            raw = _garden_retry(call, g.max_retries + 2)
+            raw = _gpu_retry(call, g.max_retries + 2)
         except Exception:
             return None
         return parse_rerank_scores(raw)
@@ -314,14 +309,14 @@ class GardenReranker(LegalReranker):
 # Factory — codebase-native equivalent of the TIP's create_backends()
 # ---------------------------------------------------------------------------
 
-def make_garden_components(config: RetrievalConfig, mock: bool = False):
+def make_gpu_components(config: RetrievalConfig, mock: bool = False):
     """
-    Build (embedder, rewriter, reranker, generator) — all PURE Garden. Returns
-    the same 4-component tuple shape the pipeline's other backends use.
+    Build (embedder, rewriter, reranker, generator) — all self-deployed GPU
+    endpoints. Returns the same 4-component tuple the pipeline's other backend uses.
     """
     return (
-        GardenEmbedder(config, dry_run=mock),
-        GardenQueryRewriter(config, mock=mock),
-        GardenReranker(config, mock=mock),
-        GardenGenerator(config, mock=mock),
+        GpuEmbedder(config, dry_run=mock),
+        GpuQueryRewriter(config, mock=mock),
+        GpuReranker(config, mock=mock),
+        GpuGenerator(config, mock=mock),
     )

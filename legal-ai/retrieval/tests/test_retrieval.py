@@ -352,10 +352,11 @@ class TestConfigLoad:
         assert cfg.retrieval.top_k_rerank == 7
 
     def test_load_from_yaml(self):
-        config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+        config_path = Path(__file__).resolve().parent.parent.parent / "config_gpu.yaml"
         if not config_path.exists():
-            pytest.skip("config.yaml not found")
+            pytest.skip("config_gpu.yaml not found")
         cfg = load_config(config_path)
-        assert cfg.qdrant.collection == "legal_vn"
-        assert cfg.models.embedder == "Qwen/Qwen3-Embedding-8B"
-        assert cfg.vllm.model == "Qwen/Qwen2.5-7B-Instruct"
+        assert cfg.backend == "gpu"
+        assert cfg.qdrant.collection == "legal_vn_garden"
+        assert cfg.embedding.dimension == 4096
+        assert cfg.retrieval.top_k_fusion == 50

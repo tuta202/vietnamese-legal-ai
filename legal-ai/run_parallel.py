@@ -13,7 +13,7 @@ Qdrant clients are used concurrently; the lazy clients are warmed single-thread
 on the first question before the pool starts.
 
 CLI:
-    python run_parallel.py --config config_vertex.yaml \
+    python run_parallel.py --config config_gpu.yaml \
         --input R2AIStage1DATA.json --output results.json --workers 8
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ log.setLevel(logging.INFO)
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Concurrent pipeline batch runner")
-    ap.add_argument("--config", default="config_vertex.yaml")
+    ap.add_argument("--config", default="config_gpu.yaml")
     ap.add_argument("--input", required=True, help="JSON [{id, question}, ...]")
     ap.add_argument("--output", default="results.json")
     ap.add_argument("--workers", type=int, default=8,
@@ -51,6 +51,9 @@ def main() -> None:
     ap.add_argument("--resume", action="store_true",
                     help="reuse completed entries from an existing --output file "
                          "and only process the missing/fallback ones")
+    ap.add_argument("--scores-detail", type=str, default=None,
+                    help="Path to JSONL file for saving full rerank scores per question"
+                         " (enables offline threshold sweep)")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -84,6 +87,9 @@ def main() -> None:
     log.info("Loaded %d questions; %d to process; workers=%d", total, len(todo), args.workers)
 
     pipeline = LegalAIPipeline(config_path=args.config, mock=False)
+    if args.scores_detail:
+        Path(args.scores_detail).parent.mkdir(parents=True, exist_ok=True)
+        pipeline._scores_detail_path = args.scores_detail
 
     def _work(q: dict) -> dict:
         return pipeline.process_question(q["id"], q["question"])

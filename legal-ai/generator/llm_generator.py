@@ -1,9 +1,13 @@
 """
-LegalGenerator — generates Vietnamese legal answers via vLLM (OpenAI-compatible API).
+LegalGenerator — generates Vietnamese legal answers.
+
+Shared base class: the model-call hook (`_chat_complete`) is overridden by the
+gpu (Gemma) and vertex (Gemini) backends; the base implementation is a generic
+OpenAI-compatible call kept only as a fallback.
 
 mock=True: returns a canned answer that contains Điều X patterns from the input
            articles and the required disclaimer. No network call is made.
-vLLM client is initialised lazily on first call to generate().
+The LLM client is initialised lazily on first call to generate().
 """
 from __future__ import annotations
 
@@ -21,7 +25,8 @@ _DIEU_PATTERN = re.compile(r"Điều\s+(\d+[a-zđ]?)", re.UNICODE)
 
 class LegalGenerator:
     """
-    Generates legal answers by calling the vLLM chat endpoint.
+    Generates legal answers by calling a chat-LLM endpoint. Shared base class —
+    gpu/vertex subclasses override only `_chat_complete`.
     Accepts RetrievalConfig; reads vllm.* and generator.* sections.
     """
 

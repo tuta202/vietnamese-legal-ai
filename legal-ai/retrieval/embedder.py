@@ -1,6 +1,9 @@
 """
 LegalEmbedder — lazy-loading dense embedder for Qwen3-Embedding.
 
+Shared base class — the gpu/vertex backends override the encode hooks to call
+their respective endpoints; the base loads a local model only as a fallback.
+
 dry_run=True: returns deterministic zero-vectors; no model loaded.
 Model is loaded on first call to embed_query() / embed_corpus().
 """

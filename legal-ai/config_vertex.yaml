@@ -1,5 +1,10 @@
-# Vertex AI / Gemini backend — SAME schema as retrieval/config.yaml.
-# Only model names + backend differ; secrets come from env / .env (see .env.example).
+# Vertex AI / Gemini backend.
+#
+# This is one of TWO parallel configs that behave identically and differ ONLY in
+# the models used; the other is config_gpu.yaml (self-deployed Qwen3 + Gemma).
+# The retrieval / reranker / generator tuning below is kept IN SYNC with
+# config_gpu.yaml — only the model-bound fields (backend, qdrant collection +
+# vector_size, models, embedding.dimension) change. Secrets come from env / .env.
 backend: vertex_ai
 
 qdrant:
@@ -9,7 +14,9 @@ qdrant:
   vector_size: 3072
   distance: Cosine
 
-# Chat-LLM endpoint (used by query rewriter, generator, LLM reranker).
+# Chat-LLM endpoint (used by query rewriter, generator, LLM reranker). Kept under
+# the `vllm` key for schema parity with the shared base classes — here it points
+# at Gemini, not a vLLM server.
 vllm:
   model: gemini-2.5-flash-lite
   gcp_project: ${GCP_PROJECT}    # empty → GOOGLE_API_KEY env var is used instead
@@ -28,25 +35,16 @@ embedding:
 reranker:
   temperature: 0.0
 
+# IN SYNC with config_gpu.yaml — keep these identical across both backends.
 retrieval:
-  # Candidate pool widened for the ~113k-article corpus (was 20/20/20 at 1044
-  # articles). With ~100x more competing documents, the relevant article needs a
-  # wider net to survive into reranking. The Vertex reranker scores the whole
-  # pool in ONE batched LLM call, so a larger top_k_fusion is cheap.
-  # NOTE: dense retrieval only benefits once Qdrant is re-embedded with the new
-  # corpus — until then the `legal_vn_vertex` collection still holds 1044 points:
-  #   python setup_qdrant_cloud.py --config config_vertex.yaml \
-  #          --corpus corpus/data/corpus.json --force
-  top_k_dense: 50
-  top_k_bm25: 50
-  top_k_fusion: 40   # candidates sent to the (single batched) LLM reranker
-  top_k_rerank: 7    # final cited articles — fixed; prefer over-citing over
-                     # missing (recall, F2-weighted 4x). 150-sample maxes at 3
-                     # but the private test set may need more.
+  top_k_dense: 80
+  top_k_bm25: 80
+  top_k_fusion: 50
+  top_k_rerank: 6
   rrf_k: 60
 
 generator:
   temperature: 0.1
   max_tokens: 3000
   top_p: 0.9
-  max_articles: 7
+  max_articles: 6

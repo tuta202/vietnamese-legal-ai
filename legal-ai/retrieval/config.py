@@ -3,8 +3,9 @@ RetrievalConfig — config-driven, all modules receive config via constructor.
 Loads from YAML; falls back to defaults if file not found.
 
 Unified schema: the same dataclasses serve both backends. `backend` selects
-between the vLLM/Qwen stack ("vllm") and the Vertex AI/Gemini stack
-("vertex_ai"); only the model-call layer differs (see vertex_backends.py).
+between the self-deployed open-source stack ("gpu": Qwen3 + Gemma on GPU
+endpoints) and the Vertex AI/Gemini stack ("vertex_ai"); only the model-call
+layer differs (see gpu_backends.py / vertex_backends.py).
 
 Secrets are never stored in the YAML — values like `${QDRANT_API_KEY}` are
 expanded from the process environment or a gitignored `.env` next to the
@@ -18,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config_gpu.yaml"
 # .env lives at the project root (legal-ai/), one level up from retrieval/.
 _DOTENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -38,10 +39,17 @@ class QdrantConfig:
 
 @dataclass
 class VllmConfig:
-    """Chat-LLM endpoint config (used by rewriter, generator, LLM reranker)."""
+    """
+    Chat-LLM endpoint config (used by rewriter, generator, LLM reranker).
+
+    Kept under the `vllm` key for schema parity with the shared base classes.
+    The vertex_ai backend uses `model` + `gcp_project`/`gcp_location` (Gemini);
+    the gpu backend ignores this section entirely and uses `gpu.*`.
+    `base_url` is only a fallback for the base components and is unused by either
+    real backend (both override the model-call hook).
+    """
     base_url: str = "http://localhost:8000/v1"
     model: str = "Qwen/Qwen2.5-7B-Instruct"
-    # Vertex AI fields — empty/default for the local vLLM backend:
     gcp_project: str = ""
     gcp_location: str = "us-central1"
 
@@ -87,19 +95,19 @@ class GeneratorConfig:
 
 
 @dataclass
-class GardenConfig:
+class GpuConfig:
     """
-    Vertex AI Model Garden (open-source, competition-compliant) backend — PURE
-    Garden: all components run open-source models on Vertex AI Online Endpoints
-    (no Gemini fallback; use backend=vertex_ai for that).
+    Self-deployed GPU backend (open-source, competition-compliant): all components
+    run open-source models on Vertex AI Online Endpoints backed by GPU (no Gemini
+    fallback; use backend=vertex_ai for that).
 
     Flat by design so the existing `_section` loader parses it without nesting.
     Endpoints are OpenAI-compatible vLLM serving; auth is a refreshed google-auth
-    bearer token (see garden_backends.py).
+    bearer token (see gpu_backends.py).
     """
     # Embedder endpoint (Qwen3-Embedding-8B). Deployed as a Vertex dedicated
     # endpoint (TEI predict API, NOT OpenAI), so it is called via its dedicated
-    # domain `embed_dns` with a :predict request — see GardenEmbedder._embed.
+    # domain `embed_dns` with a :predict request — see GpuEmbedder._embed.
     embed_endpoint_id: str = ""
     embed_model: str = "Qwen3-Embedding-8B"
     embed_dns: str = ""   # dedicated domain, e.g. <id>.<region>-<proj#>.prediction.vertexai.goog
@@ -118,7 +126,7 @@ class GardenConfig:
 
 @dataclass
 class RetrievalConfig:
-    backend: str = "vllm"   # "vllm" | "vertex_ai" | "garden"
+    backend: str = "gpu"   # "gpu" | "vertex_ai"
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
     vllm: VllmConfig = field(default_factory=VllmConfig)
     models: ModelsConfig = field(default_factory=ModelsConfig)
@@ -126,7 +134,7 @@ class RetrievalConfig:
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     retrieval: RetrievalParams = field(default_factory=RetrievalParams)
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
-    garden: GardenConfig = field(default_factory=GardenConfig)
+    gpu: GpuConfig = field(default_factory=GpuConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +202,7 @@ def load_config(path: Path | str = _DEFAULT_CONFIG_PATH) -> RetrievalConfig:
         ("reranker",  RerankerConfig,  "reranker"),
         ("retrieval", RetrievalParams, "retrieval"),
         ("generator", GeneratorConfig, "generator"),
-        ("garden",    GardenConfig,    "garden"),
+        ("gpu",    GpuConfig,    "gpu"),
     ]:
         parsed = _section(name, cls)
         if parsed is not None:
@@ -220,24 +228,19 @@ def validate_config(cfg: RetrievalConfig) -> list[str]:
             errors.append(
                 "no GCP auth — set GCP_PROJECT (Vertex/ADC) or GOOGLE_API_KEY in .env"
             )
-    elif cfg.backend == "garden":
-        _validate_garden(cfg, errors)
-    elif cfg.backend == "vllm":
-        if not cfg.vllm.base_url:
-            errors.append("vllm.base_url is empty")
-        if not cfg.qdrant.host:
-            errors.append("qdrant.host is empty")
+    elif cfg.backend == "gpu":
+        _validate_gpu(cfg, errors)
     else:
         errors.append(
             f"unknown backend '{cfg.backend}' "
-            "(expected 'vllm', 'vertex_ai' or 'garden')"
+            "(expected 'gpu' or 'vertex_ai')"
         )
     return errors
 
 
-def _validate_garden(cfg: RetrievalConfig, errors: list[str]) -> None:
-    """Validation for the pure Vertex AI Model Garden backend."""
-    g = cfg.garden
+def _validate_gpu(cfg: RetrievalConfig, errors: list[str]) -> None:
+    """Validation for the pure self-deployed GPU endpoints backend."""
+    g = cfg.gpu
 
     # Qdrant: a URL means remote (needs api_key unless localhost); otherwise the
     # local host/port pair is used.
@@ -248,15 +251,15 @@ def _validate_garden(cfg: RetrievalConfig, errors: list[str]) -> None:
     elif not cfg.qdrant.host:
         errors.append("qdrant.host is empty")
 
-    # Both endpoints are required — every component runs on Garden.
+    # Both endpoints are required — every component runs on the GPU backend.
     if not g.embed_endpoint_id:
-        errors.append("garden.embed_endpoint_id empty — set GARDEN_EMBED_ENDPOINT_ID in .env")
+        errors.append("gpu.embed_endpoint_id empty — set GPU_EMBED_ENDPOINT_ID in .env")
     if not g.embed_dns:
-        errors.append("garden.embed_dns empty — set GARDEN_EMBED_DNS in .env (dedicated domain)")
+        errors.append("gpu.embed_dns empty — set GPU_EMBED_DNS in .env (dedicated domain)")
     if not g.llm_endpoint_id:
-        errors.append("garden.llm_endpoint_id empty — set GARDEN_LLM_ENDPOINT_ID in .env")
+        errors.append("gpu.llm_endpoint_id empty — set GPU_LLM_ENDPOINT_ID in .env")
     if not g.project_id:
-        errors.append("garden.project_id empty — set GCP_PROJECT in .env")
+        errors.append("gpu.project_id empty — set GCP_PROJECT in .env")
 
     # The dense vector size must match the embedder's output dimension, or every
     # Qdrant upsert/search will fail at runtime.

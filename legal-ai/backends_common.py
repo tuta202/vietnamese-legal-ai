@@ -1,6 +1,6 @@
 """
 backends_common.py — provider-agnostic helpers shared by every model backend
-(vertex_backends.py = Gemini, garden_backends.py = Model Garden).
+(vertex_backends.py = Gemini, gpu_backends.py = GPU endpoints).
 
 Keeping these here means each backend module only contains its own model-call
 code; the retry policy, JSON-array parsing and the reranking prompt are defined
@@ -18,12 +18,47 @@ from typing import Callable
 # ---------------------------------------------------------------------------
 
 RERANK_SYSTEM = (
-    "Bạn là chuyên gia pháp lý Việt Nam. Chấm điểm mức độ liên quan của từng "
-    "điều luật đối với câu hỏi, thang điểm 0 đến 10 (10 = liên quan trực tiếp "
-    "nhất). CHỈ trả về một mảng JSON, không thêm văn bản nào khác, đúng định dạng:\n"
-    '[{"index": 0, "score": 8}, {"index": 1, "score": 3}]'
+    "Bạn là chuyên gia pháp lý Việt Nam. Đánh giá mức độ từng điều luật có thể"
+    " trả lời trực tiếp câu hỏi.\n\n"
+    "Thang điểm 0–10:\n"
+    "10 — Điều luật TRỰC TIẾP và ĐẦY ĐỦ trả lời câu hỏi (chứa đúng quy định,"
+    " mức phạt, điều kiện hoặc thủ tục được hỏi).\n"
+    "7–9 — Điều luật TRỰC TIẾP liên quan và CẦN THIẾT nhưng chỉ trả lời một phần"
+    " (cần kết hợp với điều khác mới đầy đủ).\n"
+    "4–6 — Liên quan đến CHỦ ĐỀ nhưng KHÔNG trực tiếp trả lời (bối cảnh chung,"
+    " không phải căn cứ pháp lý chính).\n"
+    "1–3 — Chỉ liên quan GIÁN TIẾP: sai đối tượng áp dụng, sai loại hành vi,"
+    " hoặc sai loại văn bản.\n"
+    "0 — Không liên quan hoặc sai hoàn toàn.\n\n"
+    "QUY TẮC BẮT BUỘC:\n"
+    "- Câu hỏi về đối tượng A, điều luật quy định đối tượng B ≠ A → tối đa 2 điểm.\n"
+    "- Câu hỏi về mức phạt, điều luật chỉ định nghĩa hành vi (không có mức phạt)"
+    " → tối đa 5 điểm.\n"
+    "- Câu hỏi về thủ tục, điều luật chỉ quy định điều kiện → tối đa 5 điểm.\n"
+    "- Điều luật tổng quát không được ưu tiên hơn điều luật cụ thể đúng đối tượng.\n\n"
+    "CHỈ trả về mảng JSON, không thêm văn bản nào khác:\n"
+    '[{"index": 0, "score": 8}, {"index": 1, "score": 3}, ...]'
 )
 RERANK_SNIPPET = 400   # chars of article content shown to the reranker per item
+
+
+def build_rerank_blocks(question: str, candidates: list[dict]) -> str:
+    """
+    Build the rerank user message shown to the LLM judge.
+
+    IDENTICAL across backends (gpu + vertex) so rerank quality is
+    backend-independent. Includes the document name (`Văn bản`) per article so the
+    model can apply the wrong-entity / wrong-document rules in RERANK_SYSTEM.
+    """
+    blocks = [f"Câu hỏi: {question}", "", "Danh sách điều luật cần chấm điểm:"]
+    for i, c in enumerate(candidates):
+        law_name = c.get("law_name", "") or c.get("relevant_doc_str", "")
+        blocks.append(
+            f"[{i}] Văn bản: {law_name}\n"
+            f"Điều: {c.get('dieu_number', '')} — {c.get('dieu_title', '')}\n"
+            f"{c.get('content', '')[:RERANK_SNIPPET]}"
+        )
+    return "\n".join(blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +120,7 @@ def retry_transient(
     endpoint and must be ridden out, not fatal. Auth expiry (401 /
     UNAUTHENTICATED) is treated as transient ONLY when `refresh_auth` is supplied
     — it is invoked before the next attempt so a stale bearer token can be
-    re-minted (Model Garden). For backends with non-expiring auth, pass
+    re-minted (GPU endpoints). For backends with non-expiring auth, pass
     refresh_auth=None and 401 propagates.
     """
     last: Exception | None = None

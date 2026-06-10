@@ -1,13 +1,17 @@
 """
 QueryRewriter — rewrites a Vietnamese legal question into a better retrieval query
-and generates a topic description for semantic search, using an LLM via vLLM.
+and generates a topic description for semantic search.
+
+Shared base class: the model-call hook (`_chat_complete`) is overridden by the
+gpu (Gemma) and vertex (Gemini) backends. The base implementation is a generic
+OpenAI-compatible call kept only as a fallback.
 
 Strategy: Instead of HyDE (which risks citing outdated law numbers/values),
 the second field describes the legal topic, terminology, and relevant document
 types — keeping the embedding anchored to concept space, not fabricated facts.
 
 mock=True: skips all network calls; returns the original question for both fields.
-vLLM client is initialised lazily on first call to rewrite().
+The LLM client is initialised lazily on first call to rewrite().
 """
 from __future__ import annotations
 
@@ -110,7 +114,8 @@ _FEW_SHOTS = [
 
 class QueryRewriter:
     """
-    Rewrites questions for better retrieval using an LLM (vLLM backend).
+    Rewrites questions for better retrieval using an LLM. Shared base class —
+    gpu/vertex subclasses override only `_chat_complete`.
     Initialise with mock=True for offline testing.
     """
 

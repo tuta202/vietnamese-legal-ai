@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,14 +24,10 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from generator.llm_generator import LegalGenerator
-from generator.prompt_builder import PromptBuilder, _DISCLAIMER
+from generator.prompt_builder import _DISCLAIMER
 from retrieval.bm25_index import BM25Index
 from retrieval.config import RetrievalConfig, load_config, validate_config
-from retrieval.embedder import LegalEmbedder
 from retrieval.hybrid_search import rrf_fusion
-from retrieval.query_rewriter import QueryRewriter
-from retrieval.reranker import LegalReranker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +36,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-_DEFAULT_CFG    = _ROOT / "retrieval" / "config.yaml"
+_DEFAULT_CFG    = _ROOT / "config_gpu.yaml"
 _BM25_PKL       = _ROOT / "retrieval" / "data" / "bm25_index.pkl"
 _CORPUS_JSON    = _ROOT / "corpus" / "data" / "corpus.json"
 
@@ -108,17 +105,26 @@ class LegalAIPipeline:
          self._reranker, self._generator) = self._make_components()
         self._qdrant = _MockQdrant() if mock else self._init_qdrant()
 
+        # Score saving — set externally by run_parallel.py --scores-detail.
+        self._scores_detail_path: str | None = None
+        self._scores_detail_lock = threading.Lock()
+
     def _make_components(self):
-        """Build the neural components for the configured backend (vllm | vertex_ai | garden)."""
-        if self.config.backend == "garden":
-            # Vertex AI Model Garden (open-source, compliant). Allows mixing —
-            # e.g. embedder=Qwen3 on Garden + LLM=Gemini until a Gemma 3 GPU
-            # endpoint exists. Returns the same 4-component tuple as the others.
-            from garden_backends import make_garden_components
-            return make_garden_components(self.config, mock=self.mock)
+        """
+        Build the four neural components for the configured backend.
+
+        Two backends are supported, behaving identically and differing only in
+        the underlying models (see config_gpu.yaml / config_vertex.yaml):
+          • gpu    → self-deployed Qwen3 + Gemma on GPU endpoints
+          • vertex_ai → Gemini
+        Both subclass the shared base components (LegalEmbedder/QueryRewriter/
+        LegalReranker/LegalGenerator), overriding only the model-call hook.
+        """
+        if self.config.backend == "gpu":
+            from gpu_backends import make_gpu_components
+            return make_gpu_components(self.config, mock=self.mock)
         if self.config.backend == "vertex_ai":
-            # Vertex subclasses override only the model-call hook; imported here
-            # so the vLLM path never touches google-genai.
+            # Imported lazily so the gpu path never touches google-genai.
             from vertex_backends import (
                 VertexEmbedder, VertexGenerator, VertexQueryRewriter, VertexReranker,
             )
@@ -128,11 +134,8 @@ class LegalAIPipeline:
                 VertexReranker(self.config, mock=self.mock),
                 VertexGenerator(self.config, mock=self.mock),
             )
-        return (
-            LegalEmbedder(self.config, dry_run=self.mock),
-            QueryRewriter(self.config, mock=self.mock),
-            LegalReranker(self.config, mock=self.mock),
-            LegalGenerator(self.config, mock=self.mock),
+        raise ValueError(
+            f"unknown backend {self.config.backend!r}; expected 'gpu' or 'vertex_ai'"
         )
 
     # ------------------------------------------------------------------
@@ -184,11 +187,29 @@ class LegalAIPipeline:
 
     def step_rerank(self, state: PipelineState) -> PipelineState:
         """Step 3: neural reranking of fused candidates."""
-        state.reranked_results = self._reranker.rerank(
-            state.question,
-            state.fused_results,
-            top_k=self.config.retrieval.top_k_rerank,
-        )
+        if self._scores_detail_path and hasattr(self._reranker, "rerank_with_scores"):
+            top_results, full_pool = self._reranker.rerank_with_scores(
+                state.question,
+                state.fused_results,
+                top_k=self.config.retrieval.top_k_rerank,
+            )
+            state.reranked_results = top_results
+            record = {
+                "id": state.question_id,
+                "question": state.question,
+                "rewritten_query": state.rewritten_query,
+                "pool_size": len(state.fused_results),
+                "candidates": full_pool,
+                "final_count": len(top_results),
+                "final_articles": [r.get("relevant_article_str", "") for r in top_results],
+            }
+            self._append_detail(record)
+        else:
+            state.reranked_results = self._reranker.rerank(
+                state.question,
+                state.fused_results,
+                top_k=self.config.retrieval.top_k_rerank,
+            )
         log.debug("Reranked to %d articles", len(state.reranked_results))
         return state
 
@@ -277,6 +298,13 @@ class LegalAIPipeline:
             Path(questions_file).read_text(encoding="utf-8")
         )
         return self.process_questions(questions)
+
+    def _append_detail(self, record: dict) -> None:
+        """Thread-safe append of one score-detail record to the JSONL file."""
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        with self._scores_detail_lock:
+            with open(self._scores_detail_path, "a", encoding="utf-8") as f:
+                f.write(line)
 
     # ------------------------------------------------------------------
     # Internals
@@ -414,8 +442,8 @@ class LegalAIPipeline:
 def main() -> None:
     parser = argparse.ArgumentParser(description="LegalAI pipeline runner")
     parser.add_argument("--config", default=None,
-                        help="Config YAML (default: retrieval/config.yaml; "
-                             "use config_vertex.yaml for the Vertex AI backend)")
+                        help="Config YAML (default: config_gpu.yaml; "
+                             "use config_vertex.yaml for the Gemini backend)")
     parser.add_argument("--mock",   action="store_true", help="Run in mock mode (no GPU/Docker)")
     parser.add_argument("--input",  required=True, help="JSON file with [{id, question}, ...]")
     parser.add_argument("--output", default="results.json", help="Output results.json path")
