@@ -1,6 +1,6 @@
 """
 backends_common.py — provider-agnostic helpers shared by every model backend
-(vertex_backends.py = Gemini, garden_backends.py = Model Garden).
+(vertex_backends.py = Gemini, gpu_backends.py = GPU endpoints).
 
 Keeping these here means each backend module only contains its own model-call
 code; the retry policy, JSON-array parsing and the reranking prompt are defined
@@ -18,12 +18,47 @@ from typing import Callable
 # ---------------------------------------------------------------------------
 
 RERANK_SYSTEM = (
-    "Bạn là chuyên gia pháp lý Việt Nam. Chấm điểm mức độ liên quan của từng "
-    "điều luật đối với câu hỏi, thang điểm 0 đến 10 (10 = liên quan trực tiếp "
-    "nhất). CHỈ trả về một mảng JSON, không thêm văn bản nào khác, đúng định dạng:\n"
-    '[{"index": 0, "score": 8}, {"index": 1, "score": 3}]'
+    "Bạn là chuyên gia pháp lý Việt Nam. Đánh giá mức độ từng điều luật có thể"
+    " trả lời trực tiếp câu hỏi.\n\n"
+    "Thang điểm 0–10:\n"
+    "10 — Điều luật TRỰC TIẾP và ĐẦY ĐỦ trả lời câu hỏi (chứa đúng quy định,"
+    " mức phạt, điều kiện hoặc thủ tục được hỏi).\n"
+    "7–9 — Điều luật TRỰC TIẾP liên quan và CẦN THIẾT nhưng chỉ trả lời một phần"
+    " (cần kết hợp với điều khác mới đầy đủ).\n"
+    "4–6 — Liên quan đến CHỦ ĐỀ nhưng KHÔNG trực tiếp trả lời (bối cảnh chung,"
+    " không phải căn cứ pháp lý chính).\n"
+    "1–3 — Chỉ liên quan GIÁN TIẾP: sai đối tượng áp dụng, sai loại hành vi,"
+    " hoặc sai loại văn bản.\n"
+    "0 — Không liên quan hoặc sai hoàn toàn.\n\n"
+    "QUY TẮC BẮT BUỘC:\n"
+    "- Câu hỏi về đối tượng A, điều luật quy định đối tượng B ≠ A → tối đa 2 điểm.\n"
+    "- Câu hỏi về mức phạt, điều luật chỉ định nghĩa hành vi (không có mức phạt)"
+    " → tối đa 5 điểm.\n"
+    "- Câu hỏi về thủ tục, điều luật chỉ quy định điều kiện → tối đa 5 điểm.\n"
+    "- Điều luật tổng quát không được ưu tiên hơn điều luật cụ thể đúng đối tượng.\n\n"
+    "CHỈ trả về mảng JSON, không thêm văn bản nào khác:\n"
+    '[{"index": 0, "score": 8}, {"index": 1, "score": 3}, ...]'
 )
 RERANK_SNIPPET = 400   # chars of article content shown to the reranker per item
+
+
+def build_rerank_blocks(question: str, candidates: list[dict]) -> str:
+    """
+    Build the rerank user message shown to the LLM judge.
+
+    IDENTICAL across backends (gpu + vertex) so rerank quality is
+    backend-independent. Includes the document name (`Văn bản`) per article so the
+    model can apply the wrong-entity / wrong-document rules in RERANK_SYSTEM.
+    """
+    blocks = [f"Câu hỏi: {question}", "", "Danh sách điều luật cần chấm điểm:"]
+    for i, c in enumerate(candidates):
+        law_name = c.get("law_name", "") or c.get("relevant_doc_str", "")
+        blocks.append(
+            f"[{i}] Văn bản: {law_name}\n"
+            f"Điều: {c.get('dieu_number', '')} — {c.get('dieu_title', '')}\n"
+            f"{c.get('content', '')[:RERANK_SNIPPET]}"
+        )
+    return "\n".join(blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -38,10 +73,18 @@ def strip_code_fences(raw: str) -> str:
     return raw.strip()
 
 
-def _scores_from_array(text: str) -> dict[int, float] | None:
-    """json.loads `text` and pull {index: score} pairs; None if not a usable array."""
+def parse_rerank_scores(raw: str) -> dict[int, float] | None:
+    """
+    Parse an LLM rerank response into {candidate_index: score}.
+    Tolerates code fences and surrounding prose. Returns None on any failure so
+    callers can fall back to retrieval order.
+    """
+    cleaned = strip_code_fences(raw)
+    m = re.search(r"\[.*\]", cleaned, flags=re.DOTALL)
+    if m:
+        cleaned = m.group(0)
     try:
-        data = json.loads(text)
+        data = json.loads(cleaned)
     except (json.JSONDecodeError, TypeError):
         return None
     if not isinstance(data, list):
@@ -53,71 +96,6 @@ def _scores_from_array(text: str) -> dict[int, float] | None:
         except (KeyError, TypeError, ValueError):
             continue
     return out or None
-
-
-def parse_rerank_scores(raw: str) -> dict[int, float] | None:
-    """
-    Parse an LLM rerank response into {candidate_index: score}.
-    Tolerates code fences and surrounding prose. Returns None on any failure so
-    callers can fall back to retrieval order.
-
-    Reasoning-tolerant (chain-of-thought rerank): a CoT response may emit prose
-    AND bracketed candidate markers like "[0] …", "[3] …" before the final score
-    array. Our score array uses objects ({…}), so it never nests brackets — scan
-    every bracket-delimited span that contains no nested bracket and take the LAST
-    one that parses into index/score pairs. Falls back to the old greedy
-    outermost-array match for arrays that legitimately contain brackets.
-    """
-    cleaned = strip_code_fences(raw)
-    spans = re.findall(r"\[[^\[\]]*\]", cleaned, flags=re.DOTALL)
-    for span in reversed(spans):
-        scores = _scores_from_array(span)
-        if scores:
-            return scores
-    m = re.search(r"\[.*\]", cleaned, flags=re.DOTALL)
-    if m:
-        return _scores_from_array(m.group(0))
-    return None
-
-
-# ---------------------------------------------------------------------------
-# Chain-of-thought rerank prompt (tier-2 collective LLM reranking)
-# ---------------------------------------------------------------------------
-
-RERANK_COT_SYSTEM = (
-    "Bạn là chuyên gia pháp luật Việt Nam. Đánh giá mức độ liên quan của từng "
-    "điều luật với câu hỏi bằng suy luận từng bước, không chỉ dựa trên trùng từ "
-    "khóa bề mặt."
-)
-
-
-def format_cot_rerank_user(
-    question: str, candidates: list[dict], snippet: int = RERANK_SNIPPET
-) -> str:
-    """
-    Build the tier-2 CoT rerank user prompt: question + 0-indexed candidate list +
-    a step-by-step reasoning scaffold, ending with a JSON-array-only instruction.
-    Indices are 0-based to match parse_rerank_scores / candidate positions.
-    """
-    blocks = [f"Câu hỏi: {question}", "", "Các điều luật ứng viên:"]
-    for i, c in enumerate(candidates):
-        blocks.append(
-            f"[{i}] {c.get('dieu_number', '')} {c.get('dieu_title', '')}\n"
-            f"{c.get('content', '')[:snippet]}"
-        )
-    blocks.append(
-        "\nSuy luận:\n"
-        "1. Yếu tố pháp lý cốt lõi của câu hỏi là gì? (thực thể, hành vi, quan hệ "
-        "pháp lý, luật được viện dẫn)\n"
-        "2. Với mỗi điều: nó giải quyết TRỰC TIẾP yếu tố ở bước 1, hay chỉ liên "
-        "quan bề mặt (trùng từ / trùng số điều)? Có quan hệ với điều khác không "
-        "(ngoại lệ, viện dẫn lẫn nhau)?\n"
-        "3. Điều nào THỰC SỰ cần để trả lời, điều nào dư thừa?\n\n"
-        "Kết luận: ở DÒNG CUỐI chỉ trả về MỘT mảng JSON (không giải thích thêm), "
-        'định dạng [{"index": 0, "score": 9}, {"index": 1, "score": 3}] — index là '
-        "số trong ngoặc vuông ở trên, score từ 0 đến 10."
-    )
-    return "\n".join(blocks)
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +120,7 @@ def retry_transient(
     endpoint and must be ridden out, not fatal. Auth expiry (401 /
     UNAUTHENTICATED) is treated as transient ONLY when `refresh_auth` is supplied
     — it is invoked before the next attempt so a stale bearer token can be
-    re-minted (Model Garden). For backends with non-expiring auth, pass
+    re-minted (GPU endpoints). For backends with non-expiring auth, pass
     refresh_auth=None and 401 propagates.
     """
     last: Exception | None = None

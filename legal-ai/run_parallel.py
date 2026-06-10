@@ -13,7 +13,7 @@ Qdrant clients are used concurrently; the lazy clients are warmed single-thread
 on the first question before the pool starts.
 
 CLI:
-    python run_parallel.py --config config_vertex.yaml \
+    python run_parallel.py --config config_gpu.yaml \
         --input R2AIStage1DATA.json --output results.json --workers 8
 """
 from __future__ import annotations
@@ -41,7 +41,7 @@ log.setLevel(logging.INFO)
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Concurrent pipeline batch runner")
-    ap.add_argument("--config", default="config_vertex.yaml")
+    ap.add_argument("--config", default="config_gpu.yaml")
     ap.add_argument("--input", required=True, help="JSON [{id, question}, ...]")
     ap.add_argument("--output", default="results.json")
     ap.add_argument("--workers", type=int, default=8,
@@ -51,10 +51,9 @@ def main() -> None:
     ap.add_argument("--resume", action="store_true",
                     help="reuse completed entries from an existing --output file "
                          "and only process the missing/fallback ones")
-    ap.add_argument("--scores-detail", default=None,
-                    help="path for the per-question scored-pool JSONL "
-                         "(default: scores_detail.jsonl next to --output). Only "
-                         "written when the backend reranker supports it (garden).")
+    ap.add_argument("--scores-detail", type=str, default=None,
+                    help="Path to JSONL file for saving full rerank scores per question"
+                         " (enables offline threshold sweep)")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -88,29 +87,12 @@ def main() -> None:
     log.info("Loaded %d questions; %d to process; workers=%d", total, len(todo), args.workers)
 
     pipeline = LegalAIPipeline(config_path=args.config, mock=False)
+    if args.scores_detail:
+        Path(args.scores_detail).parent.mkdir(parents=True, exist_ok=True)
+        pipeline._scores_detail_path = args.scores_detail
 
-    # Scored-pool detail JSONL (for offline threshold sweeping). Only emitted when
-    # the reranker exposes detail (garden 2-tier). Append-safe; a separate lock so
-    # it never nests inside the results lock.
-    detail_path = Path(args.scores_detail) if args.scores_detail \
-        else out.with_name("scores_detail.jsonl")
-    write_detail = hasattr(pipeline._reranker, "rerank_detailed")
-    detail_lock = threading.Lock()
-    if write_detail and not (args.resume and detail_path.exists()):
-        detail_path.parent.mkdir(parents=True, exist_ok=True)
-        detail_path.write_text("", encoding="utf-8")   # fresh run → truncate
-
-    def _emit_detail(detail: dict | None) -> None:
-        if not (write_detail and detail):
-            return
-        with detail_lock:
-            with detail_path.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(detail, ensure_ascii=False) + "\n")
-
-    def _work(q: dict) -> tuple[dict, dict | None]:
-        if write_detail:
-            return pipeline.process_question_detailed(q["id"], q["question"])
-        return pipeline.process_question(q["id"], q["question"]), None
+    def _work(q: dict) -> dict:
+        return pipeline.process_question(q["id"], q["question"])
 
     t0 = time.time()
     if not todo:
@@ -121,9 +103,7 @@ def main() -> None:
     # Warm up lazy clients single-threaded on the first pending question, so
     # concurrent threads never race the lazy-init.
     first = todo[0]
-    entry, detail = _work(first)
-    results[first["id"]] = entry
-    _emit_detail(detail)
+    results[first["id"]] = pipeline.process_question(first["id"], first["question"])
     log.info("Warmup question done in %.1fs (clients initialised)", time.time() - t0)
     _persist()
 
@@ -132,10 +112,9 @@ def main() -> None:
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
         futures = {ex.submit(_work, q): q["id"] for q in rest}
         for fut in as_completed(futures):
-            entry, detail = fut.result()
-            _emit_detail(detail)           # own lock, outside the results lock
+            r = fut.result()
             with lock:
-                results[entry["id"]] = entry
+                results[r["id"]] = r
                 processed += 1
                 if processed % 50 == 0 or processed == len(todo):
                     rate = processed / (time.time() - t0)
@@ -155,9 +134,8 @@ def main() -> None:
         log.info("Retry round %d: %d straggler(s) at %d workers…",
                  rnd, len(failed), retry_workers)
         with ThreadPoolExecutor(max_workers=retry_workers) as ex:
-            for entry, detail in ex.map(_work, failed):
-                _emit_detail(detail)
-                results[entry["id"]] = entry
+            for r in ex.map(_work, failed):
+                results[r["id"]] = r
         _persist()
     still = sum(1 for q in questions if not results.get(q["id"], {}).get("relevant_articles"))
     if still:

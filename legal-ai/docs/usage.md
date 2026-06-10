@@ -11,8 +11,8 @@ Hỗ trợ hai backend: **Vertex AI / Gemini** (không cần GPU) và **vLLM / Q
 legal-ai/
 ├── .venv/                   # Virtual environment (không commit)
 ├── pipeline.py              # Entry point chính
-├── config_vertex.yaml       # Config cho Vertex AI backend
-├── retrieval/config.yaml    # Config cho vLLM backend (default)
+├── config_gpu.yaml          # Config backend GPU (Qwen3 + Gemma, default)
+├── config_vertex.yaml       # Config backend Vertex AI (Gemini)
 ├── corpus/
 │   ├── parser.py            # Parser văn bản pháp luật
 │   ├── builder.py           # Build corpus.json từ file .txt

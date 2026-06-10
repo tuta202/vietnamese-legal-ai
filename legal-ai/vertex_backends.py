@@ -2,9 +2,10 @@
 vertex_backends.py — Vertex AI (Gemini) implementations of the four neural
 components, as subclasses that override ONLY the model-call hook.
 
-Everything else (prompts, few-shots, JSON parsing, RRF fusion, reranking flow,
-submission formatting) is inherited unchanged from the vLLM base classes in
-retrieval/ and generator/. Switching backends therefore changes only the model.
+Everything else (prompts, few-shots, JSON parsing, RRF fusion, reranking flow
+including rerank_with_scores, submission formatting) is inherited unchanged from
+the shared base classes in retrieval/ and generator/ — the SAME ones the gpu
+backend subclasses. Switching backends therefore changes only the model.
 
   QueryRewriter   → VertexQueryRewriter   (overrides _chat_complete)
   LegalGenerator  → VertexGenerator       (overrides _chat_complete)
@@ -19,8 +20,8 @@ from __future__ import annotations
 import numpy as np
 
 from backends_common import (
-    RERANK_SNIPPET as _RERANK_SNIPPET,
     RERANK_SYSTEM as _RERANK_SYSTEM,
+    build_rerank_blocks,
     parse_rerank_scores,
     retry_transient,
 )
@@ -204,16 +205,11 @@ class VertexReranker(LegalReranker):
     def _llm_scores(self, question: str, candidates: list[dict]) -> dict[int, float] | None:
         from google.genai import types  # lazy
 
-        blocks = [f"Câu hỏi: {question}", "", "Danh sách điều luật cần chấm điểm:"]
-        for i, c in enumerate(candidates):
-            blocks.append(
-                f"[{i}] {c.get('dieu_number', '')} {c.get('dieu_title', '')}\n"
-                f"{c.get('content', '')[:_RERANK_SNIPPET]}"
-            )
+        user_msg = build_rerank_blocks(question, candidates)
         try:
             resp = _retry(lambda: self.genai_client.models.generate_content(
                 model=self.config.models.reranker,
-                contents="\n".join(blocks),
+                contents=user_msg,
                 config=types.GenerateContentConfig(
                     system_instruction=_RERANK_SYSTEM,
                     temperature=self.config.reranker.temperature,

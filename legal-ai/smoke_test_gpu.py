@@ -1,7 +1,7 @@
 """
-smoke_test_garden.py — TIP-012 Step 1 gate.
+smoke_test_gpu.py — TIP-012 Step 1 gate.
 
-Four cheap live checks against the Garden endpoints before the expensive
+Four cheap live checks against the Gpu endpoints before the expensive
 re-embed / full run:
   1a env vars present
   1b embedder returns a valid 4096-d vector
@@ -9,7 +9,7 @@ re-embed / full run:
   1d reranker parses JSON scores (not falling back) on >=2/3 tries
 
 Run:
-    python smoke_test_garden.py --config config_garden.yaml
+    python smoke_test_gpu.py --config config_gpu.yaml
 Exit code 0 = all gates pass; non-zero = at least one failed.
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _ms(t0: float) -> int:
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="config_garden.yaml")
+    ap.add_argument("--config", default="config_gpu.yaml")
     args = ap.parse_args()
 
     _load_dotenv()
@@ -52,7 +52,7 @@ def main() -> int:
     results: list[tuple[str, bool, str]] = []
 
     # --- 1a env vars -------------------------------------------------------
-    needed = ["GCP_PROJECT", "GARDEN_EMBED_ENDPOINT_ID", "GARDEN_LLM_ENDPOINT_ID"]
+    needed = ["GCP_PROJECT", "GPU_EMBED_ENDPOINT_ID", "GPU_LLM_ENDPOINT_ID"]
     missing = [k for k in needed if not os.environ.get(k)]
     ok_env = not missing
     results.append((
@@ -68,8 +68,8 @@ def main() -> int:
         return 1
 
     config = load_config(args.config)
-    from garden_backends import make_garden_components
-    embedder, rewriter, reranker, _gen = make_garden_components(config, mock=False)
+    from gpu_backends import make_gpu_components
+    embedder, rewriter, reranker, _gen = make_gpu_components(config, mock=False)
 
     # --- 1b embedder -------------------------------------------------------
     try:

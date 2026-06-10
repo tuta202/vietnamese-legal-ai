@@ -54,7 +54,7 @@ from retrieval.config import load_config
 from retrieval.embedder import LegalEmbedder
 from qdrant_client import QdrantClient
 
-cfg      = load_config("retrieval/config.yaml")
+cfg      = load_config("config_gpu.yaml")
 articles = json.loads(open("corpus/data/corpus.json").read())["articles"]
 client   = QdrantClient(cfg.qdrant.host, port=cfg.qdrant.port)
 
@@ -73,7 +73,7 @@ from retrieval.query_rewriter import QueryRewriter
 from retrieval.reranker import LegalReranker
 from qdrant_client import QdrantClient
 
-cfg      = load_config("retrieval/config.yaml")
+cfg      = load_config("config_gpu.yaml")
 bm25     = BM25Index.load("retrieval/data/bm25_index.pkl")
 embedder = LegalEmbedder(cfg)
 rewriter = QueryRewriter(cfg)
@@ -91,21 +91,20 @@ for r in reranked:
 ## Config reference
 
 ```yaml
-# retrieval/config.yaml
+# config_gpu.yaml (backend GPU; config_vertex.yaml has the same shape for Gemini)
+backend: gpu
 qdrant:
   host: localhost
   port: 6333
-  collection: legal_vn
-vllm:
-  base_url: http://localhost:8000/v1
-  model: Qwen/Qwen2.5-7B-Instruct
-models:
-  embedder: Qwen/Qwen3-Embedding-8B
-  reranker: Qwen/Qwen3-Reranker-4B
+  collection: legal_vn_garden
+  vector_size: 4096
+gpu:
+  embed_model: Qwen3-Embedding-8B
+  llm_model: google/gemma-3-12b-it
 retrieval:
-  top_k_dense: 20
-  top_k_bm25: 20
-  top_k_fusion: 20
-  top_k_rerank: 7
+  top_k_dense: 80
+  top_k_bm25: 80
+  top_k_fusion: 50
+  top_k_rerank: 6
   rrf_k: 60
 ```

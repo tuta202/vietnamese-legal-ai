@@ -13,6 +13,7 @@ import argparse
 import json
 import logging
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -23,14 +24,10 @@ _ROOT = Path(__file__).resolve().parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from generator.llm_generator import LegalGenerator
-from generator.prompt_builder import PromptBuilder, _DISCLAIMER
+from generator.prompt_builder import _DISCLAIMER
 from retrieval.bm25_index import BM25Index
 from retrieval.config import RetrievalConfig, load_config, validate_config
-from retrieval.embedder import LegalEmbedder
 from retrieval.hybrid_search import rrf_fusion
-from retrieval.query_rewriter import QueryRewriter
-from retrieval.reranker import LegalReranker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +36,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-_DEFAULT_CFG    = _ROOT / "retrieval" / "config.yaml"
+_DEFAULT_CFG    = _ROOT / "config_gpu.yaml"
 _BM25_PKL       = _ROOT / "retrieval" / "data" / "bm25_index.pkl"
 _CORPUS_JSON    = _ROOT / "corpus" / "data" / "corpus.json"
 
@@ -59,7 +56,6 @@ class PipelineState:
     reranked_results:  list      = field(default_factory=list)
     answer:            str       = ""
     submission_entry:  dict      = field(default_factory=dict)
-    rerank_detail:     dict      = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -109,17 +105,26 @@ class LegalAIPipeline:
          self._reranker, self._generator) = self._make_components()
         self._qdrant = _MockQdrant() if mock else self._init_qdrant()
 
+        # Score saving — set externally by run_parallel.py --scores-detail.
+        self._scores_detail_path: str | None = None
+        self._scores_detail_lock = threading.Lock()
+
     def _make_components(self):
-        """Build the neural components for the configured backend (vllm | vertex_ai | garden)."""
-        if self.config.backend == "garden":
-            # Vertex AI Model Garden (open-source, compliant). Allows mixing —
-            # e.g. embedder=Qwen3 on Garden + LLM=Gemini until a Gemma 3 GPU
-            # endpoint exists. Returns the same 4-component tuple as the others.
-            from garden_backends import make_garden_components
-            return make_garden_components(self.config, mock=self.mock)
+        """
+        Build the four neural components for the configured backend.
+
+        Two backends are supported, behaving identically and differing only in
+        the underlying models (see config_gpu.yaml / config_vertex.yaml):
+          • gpu    → self-deployed Qwen3 + Gemma on GPU endpoints
+          • vertex_ai → Gemini
+        Both subclass the shared base components (LegalEmbedder/QueryRewriter/
+        LegalReranker/LegalGenerator), overriding only the model-call hook.
+        """
+        if self.config.backend == "gpu":
+            from gpu_backends import make_gpu_components
+            return make_gpu_components(self.config, mock=self.mock)
         if self.config.backend == "vertex_ai":
-            # Vertex subclasses override only the model-call hook; imported here
-            # so the vLLM path never touches google-genai.
+            # Imported lazily so the gpu path never touches google-genai.
             from vertex_backends import (
                 VertexEmbedder, VertexGenerator, VertexQueryRewriter, VertexReranker,
             )
@@ -129,11 +134,8 @@ class LegalAIPipeline:
                 VertexReranker(self.config, mock=self.mock),
                 VertexGenerator(self.config, mock=self.mock),
             )
-        return (
-            LegalEmbedder(self.config, dry_run=self.mock),
-            QueryRewriter(self.config, mock=self.mock),
-            LegalReranker(self.config, mock=self.mock),
-            LegalGenerator(self.config, mock=self.mock),
+        raise ValueError(
+            f"unknown backend {self.config.backend!r}; expected 'gpu' or 'vertex_ai'"
         )
 
     # ------------------------------------------------------------------
@@ -184,20 +186,29 @@ class LegalAIPipeline:
         return state
 
     def step_rerank(self, state: PipelineState) -> PipelineState:
-        """Step 3: neural reranking of fused candidates.
-
-        If the backend reranker exposes rerank_detailed (garden 2-tier), capture
-        the full scored intermediate pools into state.rerank_detail (for offline
-        threshold sweeping) — same endpoint cost, just keeps more of the scores.
-        """
-        top_k = self.config.retrieval.top_k_rerank
-        if hasattr(self._reranker, "rerank_detailed"):
-            state.reranked_results, state.rerank_detail = self._reranker.rerank_detailed(
-                state.question, state.fused_results, top_k=top_k
+        """Step 3: neural reranking of fused candidates."""
+        if self._scores_detail_path and hasattr(self._reranker, "rerank_with_scores"):
+            top_results, full_pool = self._reranker.rerank_with_scores(
+                state.question,
+                state.fused_results,
+                top_k=self.config.retrieval.top_k_rerank,
             )
+            state.reranked_results = top_results
+            record = {
+                "id": state.question_id,
+                "question": state.question,
+                "rewritten_query": state.rewritten_query,
+                "pool_size": len(state.fused_results),
+                "candidates": full_pool,
+                "final_count": len(top_results),
+                "final_articles": [r.get("relevant_article_str", "") for r in top_results],
+            }
+            self._append_detail(record)
         else:
             state.reranked_results = self._reranker.rerank(
-                state.question, state.fused_results, top_k=top_k
+                state.question,
+                state.fused_results,
+                top_k=self.config.retrieval.top_k_rerank,
             )
         log.debug("Reranked to %d articles", len(state.reranked_results))
         return state
@@ -240,31 +251,6 @@ class LegalAIPipeline:
     # Orchestrators
     # ------------------------------------------------------------------
 
-    def _process_to_state(self, q_id: int | str, question: str) -> PipelineState:
-        """Run all five steps, returning the enriched state (raises on failure)."""
-        state = PipelineState(question_id=q_id, question=question)
-        state = self.step_rewrite(state)
-        state = self.step_retrieve(state)
-        state = self.step_rerank(state)
-        state = self.step_generate(state)
-        state = self.step_format(state)
-
-        # Self-validate
-        mentions = self._generator.extract_dieu_mentions(state.answer)
-        if not mentions:
-            log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
-        return state
-
-    @staticmethod
-    def _fallback_entry(q_id: int | str, question: str) -> dict:
-        return {
-            "id":                q_id,
-            "question":          question,
-            "answer":            _DISCLAIMER,
-            "relevant_docs":     [],
-            "relevant_articles": [],
-        }
-
     def process_question(self, q_id: int | str, question: str) -> dict:
         """
         Run the full pipeline for a single question. Returns a submission dict.
@@ -273,53 +259,28 @@ class LegalAIPipeline:
         fallback entry is returned so one bad question never aborts the batch.
         """
         try:
-            return self._process_to_state(q_id, question).submission_entry
-        except Exception:
-            log.exception("Q%s failed — emitting fallback entry", q_id)
-            return self._fallback_entry(q_id, question)
+            state = PipelineState(question_id=q_id, question=question)
+            state = self.step_rewrite(state)
+            state = self.step_retrieve(state)
+            state = self.step_rerank(state)
+            state = self.step_generate(state)
+            state = self.step_format(state)
 
-    def process_question_detailed(
-        self, q_id: int | str, question: str
-    ) -> tuple[dict, dict]:
-        """
-        Like process_question but ALSO returns a scores-detail record capturing the
-        full BGE + CoT scored pools (for offline threshold sweeping). The record is
-        derived from the per-question state, so it is thread-safe under concurrency.
-        """
-        try:
-            state = self._process_to_state(q_id, question)
-            return state.submission_entry, self._detail_record(state)
+            # Self-validate
+            mentions = self._generator.extract_dieu_mentions(state.answer)
+            if not mentions:
+                log.warning("Q%s: answer thiếu trích dẫn 'Điều X'", q_id)
+
+            return state.submission_entry
         except Exception:
             log.exception("Q%s failed — emitting fallback entry", q_id)
-            entry = self._fallback_entry(q_id, question)
-            return entry, {
-                "id": q_id, "question": question,
-                "bge_candidates": [], "cot_candidates": [], "final": [],
+            return {
+                "id":                q_id,
+                "question":          question,
+                "answer":            _DISCLAIMER,
+                "relevant_docs":     [],
+                "relevant_articles": [],
             }
-
-    @staticmethod
-    def _detail_record(state: PipelineState) -> dict:
-        """Build the scores_detail.jsonl line from a completed state."""
-        def fmt(cands: list[dict], score_key: str) -> list[dict]:
-            rows = []
-            for c in cands:
-                rows.append({
-                    # article_id IS the citation key ("mã|tên|Điều X") used in final
-                    "article_id":    c.get("relevant_article_str", ""),
-                    "doc_name":      c.get("relevant_doc_str", ""),
-                    "article_title": f'{c.get("dieu_number", "")} {c.get("dieu_title", "")}'.strip(),
-                    score_key:       round(float(c.get(score_key, 0.0)), 6),
-                })
-            return rows
-
-        d = state.rerank_detail or {}
-        return {
-            "id":             state.question_id,
-            "question":       state.question,
-            "bge_candidates": fmt(d.get("bge_candidates", []), "ce_score"),
-            "cot_candidates": fmt(d.get("cot_candidates", []), "cot_score"),
-            "final":          state.submission_entry.get("relevant_articles", []),
-        }
 
     def process_questions(self, questions: list[dict]) -> list[dict]:
         """Process a list of {id, question} dicts."""
@@ -337,6 +298,13 @@ class LegalAIPipeline:
             Path(questions_file).read_text(encoding="utf-8")
         )
         return self.process_questions(questions)
+
+    def _append_detail(self, record: dict) -> None:
+        """Thread-safe append of one score-detail record to the JSONL file."""
+        line = json.dumps(record, ensure_ascii=False) + "\n"
+        with self._scores_detail_lock:
+            with open(self._scores_detail_path, "a", encoding="utf-8") as f:
+                f.write(line)
 
     # ------------------------------------------------------------------
     # Internals
@@ -474,8 +442,8 @@ class LegalAIPipeline:
 def main() -> None:
     parser = argparse.ArgumentParser(description="LegalAI pipeline runner")
     parser.add_argument("--config", default=None,
-                        help="Config YAML (default: retrieval/config.yaml; "
-                             "use config_vertex.yaml for the Vertex AI backend)")
+                        help="Config YAML (default: config_gpu.yaml; "
+                             "use config_vertex.yaml for the Gemini backend)")
     parser.add_argument("--mock",   action="store_true", help="Run in mock mode (no GPU/Docker)")
     parser.add_argument("--input",  required=True, help="JSON file with [{id, question}, ...]")
     parser.add_argument("--output", default="results.json", help="Output results.json path")

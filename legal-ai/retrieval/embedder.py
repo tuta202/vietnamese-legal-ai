@@ -1,6 +1,9 @@
 """
 LegalEmbedder — lazy-loading dense embedder for Qwen3-Embedding.
 
+Shared base class — the gpu/vertex backends override the encode hooks to call
+their respective endpoints; the base loads a local model only as a fallback.
+
 dry_run=True: returns deterministic zero-vectors; no model loaded.
 Model is loaded on first call to embed_query() / embed_corpus().
 """
@@ -60,11 +63,7 @@ class LegalEmbedder:
     # ------------------------------------------------------------------
 
     def _format_query(self, text: str) -> str:
-        # Qwen3 asymmetric prefix; instruction is config-driven (falls back to the
-        # module default for configs that predate the field). Documents are NOT
-        # prefixed (see _format_document) — query/document asymmetry is required.
-        instr = getattr(self.config.embedding, "query_instruction", "") or _EMBED_INSTRUCTION
-        return f"Instruct: {instr}\nQuery: {text}"
+        return f"Instruct: {_EMBED_INSTRUCTION}\nQuery: {text}"
 
     def _format_document(self, article: dict) -> str:
         header = (

@@ -291,7 +291,10 @@ curl http://localhost:8000/v1/chat/completions \
 
 ## Bước 7: Update config
 
-Sửa `retrieval/config.yaml` cho đúng endpoint:
+> ⚠️ **Legacy:** phần dưới mô tả cách chạy vLLM server local (backend `vllm` đã
+> được gỡ bỏ). Đường chạy hiện tại dùng endpoint GPU managed — xem `config_gpu.yaml`.
+
+Sửa config cho đúng endpoint:
 
 ```yaml
 qdrant:

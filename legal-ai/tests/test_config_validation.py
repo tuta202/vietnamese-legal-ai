@@ -23,11 +23,25 @@ class TestValidateConfig:
         cfg.vllm.gcp_project = "proj"
         assert validate_config(cfg) == []
 
-    def test_vllm_defaults_ok(self):
-        assert validate_config(RetrievalConfig(backend="vllm")) == []
+    def test_gpu_ok_with_endpoints(self):
+        cfg = RetrievalConfig(backend="gpu")
+        cfg.gpu.embed_endpoint_id = "e1"
+        cfg.gpu.embed_dns = "embed.example.goog"
+        cfg.gpu.llm_endpoint_id = "l1"
+        cfg.gpu.project_id = "proj"
+        assert validate_config(cfg) == []
+
+    def test_gpu_missing_endpoints_flagged(self):
+        errs = validate_config(RetrievalConfig(backend="gpu"))
+        assert any("embed_endpoint_id" in e for e in errs)
 
     def test_unknown_backend_flagged(self):
         errs = validate_config(RetrievalConfig(backend="nope"))
+        assert any("unknown backend" in e for e in errs)
+
+    def test_vllm_backend_now_unknown(self):
+        # The local vLLM backend was removed; "vllm" is no longer a valid backend.
+        errs = validate_config(RetrievalConfig(backend="vllm"))
         assert any("unknown backend" in e for e in errs)
 
 

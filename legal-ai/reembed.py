@@ -2,17 +2,17 @@
 reembed.py — one-shot corpus re-embedding when the embedder changes.
 
 Recreates the Qdrant collection at the config's dimension and embeds every
-article in corpus.json with the configured embedder (Garden Qwen3-Embedding-8B by
+article in corpus.json with the configured embedder (Gpu Qwen3-Embedding-8B by
 default), upserting the SAME payload shape the pipeline expects. Resumable via a
 checkpoint file so an interrupted ~2h run continues where it stopped.
 
 This overlaps with setup_qdrant_cloud.py (which targets Qdrant Cloud / Gemini);
-reembed.py is the local-Qdrant + Garden-embedder counterpart with an explicit
+reembed.py is the local-Qdrant + Gpu-embedder counterpart with an explicit
 checkpoint and a self-retrieval verification step.
 
 CLI:
-    python reembed.py --config config_garden.yaml --fresh    # wipe + embed all
-    python reembed.py --config config_garden.yaml --resume   # continue from checkpoint
+    python reembed.py --config config_gpu.yaml --fresh    # wipe + embed all
+    python reembed.py --config config_gpu.yaml --resume   # continue from checkpoint
 """
 from __future__ import annotations
 
@@ -147,7 +147,7 @@ def _verify(client, embedder, config, articles: list[dict]) -> bool:
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Re-embed corpus into Qdrant")
-    ap.add_argument("--config", default="config_garden.yaml")
+    ap.add_argument("--config", default="config_gpu.yaml")
     ap.add_argument("--corpus", default=str(_DEFAULT_CORPUS))
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--fresh", action="store_true",
@@ -164,8 +164,8 @@ def main() -> None:
             print(f"  ✗ {p}")
         sys.exit(1)
 
-    from garden_backends import make_garden_components
-    embedder = make_garden_components(config, mock=False)[0]
+    from gpu_backends import make_gpu_components
+    embedder = make_gpu_components(config, mock=False)[0]
 
     from qdrant_client.models import PointStruct
 
