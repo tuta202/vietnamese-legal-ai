@@ -37,9 +37,9 @@ reranker:
 
 # IN SYNC with config_gpu.yaml — keep these identical across both backends.
 retrieval:
-  top_k_dense: 80
-  top_k_bm25: 80
-  top_k_fusion: 50
+  top_k_dense: 240       # buffer over fusion
+  top_k_bm25: 240        # buffer over fusion
+  top_k_fusion: 200      # fused candidate pool (recall@200 — chosen pool size)
   top_k_rerank: 6
   rrf_k: 60
 

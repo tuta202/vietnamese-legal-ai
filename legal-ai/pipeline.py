@@ -282,6 +282,34 @@ class LegalAIPipeline:
                 "relevant_articles": [],
             }
 
+    def process_question_retrieve_only(self, q_id: int | str, question: str) -> dict:
+        """
+        Run ONLY the retrieval stage (rewrite → BM25+dense → RRF) and stop after
+        fusion — no rerank, no generate. The submission entry is built from the
+        top `top_k_fusion` fused candidates with an EMPTY answer field. Used to
+        measure recall@K (e.g. recall@100) of the retrieval funnel.
+
+        Same fail-soft contract as process_question: any error → fallback entry.
+        """
+        try:
+            state = PipelineState(question_id=q_id, question=question)
+            state = self.step_rewrite(state)
+            state = self.step_retrieve(state)
+            # top_k_fusion already truncates fused_results; feed straight to format.
+            state.reranked_results = state.fused_results
+            state.answer = ""
+            state = self.step_format(state)
+            return state.submission_entry
+        except Exception:
+            log.exception("Q%s failed (retrieve-only) — emitting fallback entry", q_id)
+            return {
+                "id":                q_id,
+                "question":          question,
+                "answer":            "",
+                "relevant_docs":     [],
+                "relevant_articles": [],
+            }
+
     def process_questions(self, questions: list[dict]) -> list[dict]:
         """Process a list of {id, question} dicts."""
         results = []

@@ -43,9 +43,9 @@ reranker:
   temperature: 0.0
 
 retrieval:
-  top_k_dense: 80        # per dense query (rewritten + topic)
-  top_k_bm25: 80         # per BM25 query
-  top_k_fusion: 50       # fused pool → whole-pool LLM rerank
+  top_k_dense: 240       # per dense query (rewritten + topic); buffer over fusion
+  top_k_bm25: 240        # per BM25 query; buffer over fusion
+  top_k_fusion: 200      # fused candidate pool (recall@200 — chosen pool size)
   top_k_rerank: 6        # final cited articles
   rrf_k: 60
 

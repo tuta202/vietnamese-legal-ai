@@ -54,6 +54,9 @@ def main() -> None:
     ap.add_argument("--scores-detail", type=str, default=None,
                     help="Path to JSONL file for saving full rerank scores per question"
                          " (enables offline threshold sweep)")
+    ap.add_argument("--retrieve-only", action="store_true",
+                    help="Stop after RRF fusion (no rerank/generate); emit the top "
+                         "top_k_fusion candidates with empty answer (recall@K probing)")
     args = ap.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -91,8 +94,11 @@ def main() -> None:
         Path(args.scores_detail).parent.mkdir(parents=True, exist_ok=True)
         pipeline._scores_detail_path = args.scores_detail
 
+    _run = (pipeline.process_question_retrieve_only if args.retrieve_only
+            else pipeline.process_question)
+
     def _work(q: dict) -> dict:
-        return pipeline.process_question(q["id"], q["question"])
+        return _run(q["id"], q["question"])
 
     t0 = time.time()
     if not todo:
@@ -103,7 +109,7 @@ def main() -> None:
     # Warm up lazy clients single-threaded on the first pending question, so
     # concurrent threads never race the lazy-init.
     first = todo[0]
-    results[first["id"]] = pipeline.process_question(first["id"], first["question"])
+    results[first["id"]] = _run(first["id"], first["question"])
     log.info("Warmup question done in %.1fs (clients initialised)", time.time() - t0)
     _persist()
 
