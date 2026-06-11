@@ -48,3 +48,13 @@ generator:
   max_tokens: 3000
   top_p: 0.9
   max_articles: 6
+
+# BGE reranker (BAAI/bge-reranker-v2-m3) on GPU — SHARED by both backends (the
+# Vertex/Gemini stack reranks with this same GPU cross-encoder). Keep IN SYNC
+# with config_gpu.yaml. Empty env values are fine until the endpoint is deployed.
+bge:
+  endpoint_id: ${GPU_BGE_ENDPOINT_ID}
+  dns: ${GPU_BGE_DNS}                   # empty → shared regional domain
+  region: asia-northeast1               # L4 deployment region
+  project_id: ${GCP_PROJECT}
+  max_texts: 32                         # hard limit per :predict call

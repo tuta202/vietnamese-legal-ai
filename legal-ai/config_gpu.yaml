@@ -33,6 +33,16 @@ gpu:
   max_retries: 3
   timeout: 120
 
+# BGE reranker (BAAI/bge-reranker-v2-m3) on GPU — SHARED by both backends (gpu +
+# vertex_ai use this same cross-encoder endpoint). Keep this block IN SYNC with
+# config_vertex.yaml. Empty env values are fine until the endpoint is deployed.
+bge:
+  endpoint_id: ${GPU_BGE_ENDPOINT_ID}
+  dns: ${GPU_BGE_DNS}                   # empty → shared regional domain
+  region: asia-northeast1               # L4 deployment region
+  project_id: ${GCP_PROJECT}
+  max_texts: 32                         # hard limit per :predict call
+
 embedding:
   dimension: 4096                # Qwen3-Embedding-8B (must == qdrant.vector_size)
   task_type: RETRIEVAL_DOCUMENT

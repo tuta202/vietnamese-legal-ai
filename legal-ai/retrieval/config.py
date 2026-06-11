@@ -125,6 +125,25 @@ class GpuConfig:
 
 
 @dataclass
+class BgeConfig:
+    """
+    BGE reranker endpoint (BAAI/bge-reranker-v2-m3) — a cross-encoder deployed on
+    GPU (Vertex dedicated endpoint, TEI :predict route). SHARED by both backends:
+    the gpu and vertex_ai stacks both call this same endpoint for reranking. Used
+    by the offline validation tooling (bge_scorer.py / bge_ab_probe.py); empty
+    until deployed. `dns` empty → the shared regional aiplatform domain is used
+    (only works for non-dedicated endpoints); set it for a dedicated endpoint.
+    """
+    endpoint_id: str = ""
+    dns: str = ""
+    region: str = "asia-northeast1"
+    project_id: str = ""
+    max_texts: int = 32   # hard cap on docs per :predict call
+    timeout: int = 120
+    max_retries: int = 3
+
+
+@dataclass
 class RetrievalConfig:
     backend: str = "gpu"   # "gpu" | "vertex_ai"
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
@@ -135,6 +154,7 @@ class RetrievalConfig:
     retrieval: RetrievalParams = field(default_factory=RetrievalParams)
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
     gpu: GpuConfig = field(default_factory=GpuConfig)
+    bge: BgeConfig = field(default_factory=BgeConfig)
 
 
 # ---------------------------------------------------------------------------
@@ -203,6 +223,7 @@ def load_config(path: Path | str = _DEFAULT_CONFIG_PATH) -> RetrievalConfig:
         ("retrieval", RetrievalParams, "retrieval"),
         ("generator", GeneratorConfig, "generator"),
         ("gpu",    GpuConfig,    "gpu"),
+        ("bge",    BgeConfig,    "bge"),
     ]:
         parsed = _section(name, cls)
         if parsed is not None:
