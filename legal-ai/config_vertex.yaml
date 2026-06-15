@@ -42,6 +42,10 @@ retrieval:
   top_k_fusion: 200      # fused candidate pool (recall@200 — chosen pool size)
   top_k_rerank: 6
   rrf_k: 60
+  enable_intent_retrieval: true
+  intent_top_k_bm25: 50
+  intent_top_k_dense: 50
+  intent_top_k_rrf: 10
 
 generator:
   temperature: 0.1

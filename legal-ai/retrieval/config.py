@@ -84,6 +84,10 @@ class RetrievalParams:
     top_k_fusion: int = 40
     top_k_rerank: int = 7
     rrf_k: int = 60
+    enable_intent_retrieval: bool = True
+    intent_top_k_bm25: int = 50
+    intent_top_k_dense: int = 50
+    intent_top_k_rrf: int = 10
 
 
 @dataclass

@@ -28,6 +28,7 @@ from generator.prompt_builder import _DISCLAIMER
 from retrieval.bm25_index import BM25Index
 from retrieval.config import RetrievalConfig, load_config, validate_config
 from retrieval.hybrid_search import rrf_fusion
+from retrieval.intent_decomposer import LegalIntentDecomposer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +42,15 @@ _BM25_PKL       = _ROOT / "retrieval" / "data" / "bm25_index.pkl"
 _CORPUS_JSON    = _ROOT / "corpus" / "data" / "corpus.json"
 
 
+def _norm_article(value: str) -> str:
+    return " ".join(str(value or "").split())
+
+
+def _doc_from_article(value: str) -> str:
+    parts = _norm_article(value).split("|")
+    return "|".join(parts[:2]) if len(parts) >= 2 else ""
+
+
 # ---------------------------------------------------------------------------
 # State
 # ---------------------------------------------------------------------------
@@ -52,7 +62,12 @@ class PipelineState:
     question:          str
     rewritten_query:   str       = ""
     topic_description: str       = ""
+    intent_queries:    list[str] = field(default_factory=list)
     fused_results:     list      = field(default_factory=list)
+    intent_hits:       list      = field(default_factory=list)
+    retrieval_metrics: dict      = field(default_factory=dict)
+    expected_articles: list[str] = field(default_factory=list)
+    expected_docs:     list[str] = field(default_factory=list)
     reranked_results:  list      = field(default_factory=list)
     answer:            str       = ""
     submission_entry:  dict      = field(default_factory=dict)
@@ -103,6 +118,11 @@ class LegalAIPipeline:
         self._bm25 = self._init_bm25()
         (self._embedder, self._rewriter,
          self._reranker, self._generator) = self._make_components()
+        self._decomposer = LegalIntentDecomposer(
+            self.config,
+            mock=self.mock,
+            chat_complete=getattr(self._rewriter, "_chat_complete", None),
+        )
         self._qdrant = _MockQdrant() if mock else self._init_qdrant()
 
         # Score saving — set externally by run_parallel.py --scores-detail.
@@ -150,6 +170,13 @@ class LegalAIPipeline:
         log.debug("Rewritten: %s", state.rewritten_query[:80])
         return state
 
+    def step_decompose(self, state: PipelineState) -> PipelineState:
+        """Step 1b: decompose the original question into legal retrieval intents."""
+        analysis = self._decomposer.decompose(state.question)
+        state.intent_queries = analysis.intents
+        log.debug("Decomposed into %d intent(s)", len(state.intent_queries))
+        return state
+
     def step_retrieve(self, state: PipelineState) -> PipelineState:
         """Step 2: BM25 + dense search → RRF fusion."""
         query = state.rewritten_query or state.question
@@ -171,18 +198,35 @@ class LegalAIPipeline:
             dense_payloads = {**dense_payloads, **td_payloads}
 
         fused = rrf_fusion(rankings, k=self.config.retrieval.rrf_k)
-        results = self._resolve_payloads(
+        global_results = self._resolve_payloads(
             fused[: self.config.retrieval.top_k_fusion], dense_payloads
         )
+        for r in global_results:
+            r.setdefault("retrieval_source", "global")
+            r.setdefault("from_intent", False)
+            r.setdefault("intent_ids", [])
 
         # Fallback: if nothing resolved (e.g. rewritten query missed), retry BM25
         # on the original question so we never produce an empty-context answer.
-        if not results:
+        if not global_results:
             fb = self._bm25.search(state.question, top_k=self.config.retrieval.top_k_fusion)
-            results = self._resolve_payloads(fb, {})
+            global_results = self._resolve_payloads(fb, {})
+            for r in global_results:
+                r.setdefault("retrieval_source", "global_fallback")
+                r.setdefault("from_intent", False)
+                r.setdefault("intent_ids", [])
 
-        state.fused_results = results
-        log.debug("Retrieved %d candidates", len(state.fused_results))
+        intent_results = self._retrieve_intent_hits(state)
+        state.intent_hits = intent_results
+
+        state.fused_results = global_results
+        state.retrieval_metrics = self._retrieval_metrics(state, global_results, intent_results)
+        log.debug(
+            "Retrieved %d global candidates plus %d intent hits from %d intent(s)",
+            len(state.fused_results),
+            len(intent_results),
+            len(state.intent_queries),
+        )
         return state
 
     def step_rerank(self, state: PipelineState) -> PipelineState:
@@ -198,7 +242,13 @@ class LegalAIPipeline:
                 "id": state.question_id,
                 "question": state.question,
                 "rewritten_query": state.rewritten_query,
+                "topic_description": state.topic_description,
+                "intents": state.intent_queries,
+                "num_intents": len(state.intent_queries),
+                "retrieval_metrics": state.retrieval_metrics,
                 "pool_size": len(state.fused_results),
+                "intent_hit_count": len(state.intent_hits),
+                "keep_count": self._keep_count_for_logging(state.fused_results, state.intent_hits),
                 "candidates": full_pool,
                 "final_count": len(top_results),
                 "final_articles": [r.get("relevant_article_str", "") for r in top_results],
@@ -261,6 +311,7 @@ class LegalAIPipeline:
         try:
             state = PipelineState(question_id=q_id, question=question)
             state = self.step_rewrite(state)
+            state = self.step_decompose(state)
             state = self.step_retrieve(state)
             state = self.step_rerank(state)
             state = self.step_generate(state)
@@ -294,6 +345,7 @@ class LegalAIPipeline:
         try:
             state = PipelineState(question_id=q_id, question=question)
             state = self.step_rewrite(state)
+            state = self.step_decompose(state)
             state = self.step_retrieve(state)
             # top_k_fusion already truncates fused_results; feed straight to format.
             state.reranked_results = state.fused_results
@@ -365,7 +417,101 @@ class LegalAIPipeline:
             return QdrantClient(url=q.url, api_key=q.api_key)
         return QdrantClient(q.host, port=q.port)
 
-    def _dense_search(self, vector) -> tuple[list[tuple[str, float]], dict[str, dict]]:
+    def _retrieve_intent_hits(self, state: PipelineState) -> list[dict]:
+        """Retrieve top intent candidates using BM25(intent) + Dense(intent)."""
+        cfg = self.config.retrieval
+        if not cfg.enable_intent_retrieval or not state.intent_queries:
+            return []
+
+        by_chunk: dict[str, dict] = {}
+        for intent_id, intent in enumerate(state.intent_queries, start=1):
+            text = intent.strip()
+            if not text:
+                continue
+            bm25_hits = self._bm25.search(text, top_k=cfg.intent_top_k_bm25)
+            vec = self._embedder.embed_query(text)
+            dense_hits, dense_payloads = self._dense_search(vec, limit=cfg.intent_top_k_dense)
+            fused = rrf_fusion([bm25_hits, dense_hits], k=cfg.rrf_k)[: cfg.intent_top_k_rrf]
+            resolved = self._resolve_payloads(fused, dense_payloads)
+            for rank, item in enumerate(resolved, start=1):
+                chunk_id = item.get("chunk_id")
+                if not chunk_id:
+                    continue
+                current = by_chunk.get(chunk_id)
+                if current is None:
+                    item["retrieval_source"] = "intent"
+                    item["from_intent"] = True
+                    item["intent_ids"] = [intent_id]
+                    item["intent_queries"] = [text]
+                    item["intent_rank"] = rank
+                    item["intent_rrf_score"] = item.get("rrf_score", 0.0)
+                    by_chunk[chunk_id] = item
+                else:
+                    ids = current.setdefault("intent_ids", [])
+                    if intent_id not in ids:
+                        ids.append(intent_id)
+                    queries = current.setdefault("intent_queries", [])
+                    if text not in queries:
+                        queries.append(text)
+                    current["intent_rank"] = min(current.get("intent_rank", rank), rank)
+
+        return sorted(
+            by_chunk.values(),
+            key=lambda c: (c.get("intent_rank", 10**9), -float(c.get("intent_rrf_score", 0.0))),
+        )
+
+    def _retrieval_metrics(
+        self,
+        state: PipelineState,
+        global_results: list[dict],
+        intent_results: list[dict],
+    ) -> dict:
+        """Per-question retrieval diagnostics; recall is filled when gold is present."""
+        expected = {_norm_article(a) for a in state.expected_articles if a}
+
+        def _article_set(items: list[dict]) -> set[str]:
+            return {_norm_article(x.get("relevant_article_str", "")) for x in items if x.get("relevant_article_str")}
+
+        global_set = _article_set(global_results)
+        intent_set = _article_set(intent_results)
+        keep_set = global_set | intent_set
+
+        def _recall(found: set[str]) -> float | None:
+            if not expected:
+                return None
+            return len(found & expected) / len(expected)
+
+        expected_docs = {_norm_article(d) for d in state.expected_docs if d}
+        if not expected_docs and expected:
+            expected_docs = {_doc_from_article(a) for a in expected if _doc_from_article(a)}
+        cross_document = len(expected_docs) > 1 if expected_docs else None
+
+        return {
+            "num_intents": len(state.intent_queries),
+            "intent_lengths": [len(i) for i in state.intent_queries],
+            "global_count": len(global_results),
+            "intent_count": len(intent_results),
+            "keep_count": len(keep_set),
+            "global_recall": _recall(global_set),
+            "intent_only_recall": _recall(intent_set),
+            "keep_recall": _recall(keep_set),
+            "cross_document": cross_document,
+        }
+
+    @staticmethod
+    def _keep_count_for_logging(global_results: list[dict], intent_results: list[dict]) -> int:
+        articles = {
+            _norm_article(c.get("relevant_article_str", ""))
+            for c in global_results + intent_results
+            if c.get("relevant_article_str")
+        }
+        return len(articles)
+
+    def _dense_search(
+        self,
+        vector,
+        limit: int | None = None,
+    ) -> tuple[list[tuple[str, float]], dict[str, dict]]:
         """
         Dense search via Qdrant query_points.
 
@@ -387,7 +533,7 @@ class LegalAIPipeline:
                 resp = self._qdrant.query_points(
                     collection_name=self.config.qdrant.collection,
                     query=vec_list,
-                    limit=self.config.retrieval.top_k_dense,
+                    limit=limit or self.config.retrieval.top_k_dense,
                     with_payload=True,
                 )
                 break

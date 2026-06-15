@@ -65,6 +65,7 @@ def _pool_entry(pipeline: LegalAIPipeline, bge: BgeScorer,
     try:
         state = PipelineState(question_id=qid, question=question)
         state = pipeline.step_rewrite(state)
+        state = pipeline.step_decompose(state)
         state = pipeline.step_retrieve(state)       # RRF-ordered pool
         pool = state.fused_results
         # BGE judges the ORIGINAL question (mirrors the LLM reranker, which scores
@@ -74,6 +75,19 @@ def _pool_entry(pipeline: LegalAIPipeline, bge: BgeScorer,
             "id": qid,
             "question": question,
             "rewritten_query": state.rewritten_query,
+            "topic_description": state.topic_description,
+            "intents": state.intent_queries,
+            "num_intents": len(state.intent_queries),
+            "retrieval_metrics": state.retrieval_metrics,
+            "intent_hits": [
+                {
+                    "article": c.get("relevant_article_str", ""),
+                    "doc": c.get("relevant_doc_str", ""),
+                    "intent_ids": c.get("intent_ids", []),
+                    "intent_queries": c.get("intent_queries", []),
+                }
+                for c in state.intent_hits
+            ],
             "pool": [
                 {
                     "article": c.get("relevant_article_str", ""),
@@ -318,10 +332,11 @@ def mode_analyze(args) -> None:
     sub_u8080, sub_u8060, empty = [], [], 0
     for e in data:
         pool = e.get("pool", [])
+        intent_order = e.get("intent_hits", [])
         if not pool:
             empty += 1
-            sub_u8080.append(_submission_entry(e, []))
-            sub_u8060.append(_submission_entry(e, []))
+            sub_u8080.append(_submission_entry(e, intent_order))
+            sub_u8060.append(_submission_entry(e, intent_order))
             continue
         rrf_order = pool                                  # stored in RRF order
         bge_order = sorted(pool, key=lambda c: c["bge"], reverse=True)
@@ -329,16 +344,17 @@ def mode_analyze(args) -> None:
         s_bge80 = {c["article"] for c in bge_order[:KB] if c["article"]}
         s_rrf80 = {c["article"] for c in rrf_order[:KR1] if c["article"]}
         s_rrf60 = {c["article"] for c in rrf_order[:KR2] if c["article"]}
+        s_intent = {c["article"] for c in intent_order if c.get("article")}
 
         overlap.append(len(s_bge80 & s_rrf80))
-        u8080_sz.append(len(s_bge80 | s_rrf80))
-        u8060_sz.append(len(s_bge80 | s_rrf60))
+        u8080_sz.append(len(s_bge80 | s_rrf80 | s_intent))
+        u8060_sz.append(len(s_bge80 | s_rrf60 | s_intent))
         only_bge.append(len(s_bge80 - s_rrf80))
         only_rrf.append(len(s_rrf80 - s_bge80))
 
         # union submissions (empty answer) — dedup handled by _submission_entry
-        sub_u8080.append(_submission_entry(e, bge_order[:KB] + rrf_order[:KR1]))
-        sub_u8060.append(_submission_entry(e, bge_order[:KB] + rrf_order[:KR2]))
+        sub_u8080.append(_submission_entry(e, bge_order[:KB] + rrf_order[:KR1] + intent_order))
+        sub_u8060.append(_submission_entry(e, bge_order[:KB] + rrf_order[:KR2] + intent_order))
 
     out_u8080 = "outputs/submission_union_b80_r80"
     out_u8060 = "outputs/submission_union_b80_r60"

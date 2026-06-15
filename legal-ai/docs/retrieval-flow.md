@@ -1,279 +1,583 @@
-# Luồng Retrieval — Hybrid BM25 + Dense + RRF
+# Luồng Retrieval hiện tại
 
-Tài liệu mô tả chi tiết **giai đoạn truy hồi (retrieval)** của hệ thống Vietnamese
-Legal AI: nó nhận gì, làm gì qua từng bước, và xuất ra gì cho tầng rerank.
+Tài liệu này mô tả luồng retrieval đang chạy trong hệ thống Vietnamese Legal AI sau khi bổ sung nhánh **Legal Intent Decomposition**.
 
-> Phạm vi: đây là **Step 2** trong pipeline 5 bước
-> `rewrite → **retrieve** → rerank → generate → format`.
-> Code chính: `pipeline.py::step_retrieve`, `retrieval/bm25_index.py`,
-> `retrieval/embedder.py`, `retrieval/query_rewriter.py`, `retrieval/hybrid_search.py`.
->
-> **Cập nhật TIP-019:** rerank trở về **single-tier** whole-pool LLM (bỏ BGE
-> two-tier vì làm giảm F2 — xem §9) và **bỏ query decomposition** (sub-queries
-> làm regress). Tài liệu này đã được cập nhật cho code hiện tại: `step_retrieve`
-> chỉ chạy **BM25(rewritten) + Dense(rewritten) + Dense(topic) → RRF**, pool
-> `top_k_fusion=50`. Tham số theo `config_gpu.yaml`.
+Mục tiêu thiết kế hiện tại:
+
+- Giữ nguyên luồng tốt cũ: `rewrite -> global retrieval -> RRF -> BGE scoring/rerank/package`.
+- Không sửa prompt hoặc logic của `QueryRewriter`.
+- Thêm một call LLM riêng để tách intent pháp lý, dùng làm nhánh cứu recall.
+- Không đưa intent results vào main global RRF ở giai đoạn này.
+
+Các file chính:
+
+- `pipeline.py`
+- `retrieval/query_rewriter.py`
+- `retrieval/intent_decomposer.py`
+- `retrieval/bm25_index.py`
+- `retrieval/embedder.py`
+- `retrieval/hybrid_search.py`
+- `bge_ab_probe.py`
 
 ---
 
-## 1. Tổng quan — "hybrid"
+## 1. Tổng quan
 
-Một câu hỏi pháp lý có thể khớp tài liệu theo **hai cách khác nhau**, và không cách
-nào đủ một mình:
+Luồng hiện tại có hai nhánh retrieval:
 
-| Kiểu khớp | Điểm mạnh | Điểm yếu |
-|-----------|-----------|----------|
-| **Lexical (BM25)** | Khớp đúng thuật ngữ luật, số hiệu, từ hiếm ("doanh nghiệp siêu nhỏ", "04/2017/QH14") | Mù nghĩa — không hiểu "sa thải" ≈ "chấm dứt hợp đồng" |
-| **Dense (vector)** | Hiểu ngữ nghĩa, diễn đạt khác từ vẫn khớp | Hay "trôi" sang chủ đề gần giống; bỏ lỡ từ khóa hiếm |
-
-Hệ thống chạy **cả hai song song** rồi hợp nhất bằng **Reciprocal Rank Fusion (RRF)**.
-Đây là cơ chế **recall-first**: gom thật rộng (50 ứng viên) để tầng rerank phía sau
-lọc tinh (50 → 6).
-
-```
-                          câu hỏi gốc
-                              │
-                        ┌─────▼─────┐
-                        │  REWRITE  │  (Step 1 — Gemma)
-                        └─────┬─────┘
-              rewritten_query + topic_description
-                              │
-   ┌──────────────┬───────────┴──────────┐
-   ▼              ▼                       ▼
-┌───────┐   ┌───────────┐         ┌──────────────┐
-│ BM25  │   │   DENSE    │        │    DENSE     │
-│(rewrt)│   │  (rewrt)   │        │ (topic_desc) │
-└───┬───┘   └─────┬──────┘        └──────┬───────┘
-    │ ranked      │ ranked               │ ranked (nếu topic ≠ rewritten)
-    └─────────────┴──────────┬───────────┘
-                             ▼
-                      ┌─────────────┐
-                      │ RRF FUSION  │  (rrf_k = 60)
-                      └──────┬──────┘
-                             ▼ top_k_fusion = 50
-                      ┌─────────────┐
-                      │  RESOLVE    │  (gắn payload đầy đủ cho mỗi chunk)
-                      │  PAYLOADS   │
-                      └──────┬──────┘
-                             ▼
-                   50 ứng viên  →  tầng RERANK (single-tier LLM → 6)
+```text
+Original question
+  |
+  +--> Existing Rewrite Chain
+  |      |
+  |      +--> rewritten_query
+  |      +--> topic_description
+  |      |
+  |      +--> Global Retrieval
+  |             - BM25(rewritten_query)
+  |             - Dense(rewritten_query)
+  |             - Dense(topic_description)
+  |             |
+  |             +--> RRF
+  |             +--> rrf_top200
+  |
+  +--> Legal Intent Decomposition Chain
+         |
+         +--> intents: list[str]
+         |
+         +--> Intent Retrieval
+                for each intent:
+                  - BM25(intent, top50)
+                  - Dense(intent, top50)
+                  - RRF(intent)
+                  - keep top10
+                |
+                +--> intent_hits
 ```
 
----
+Điểm quan trọng:
 
-## 2. Đầu vào: kết quả của Query Rewriting
-
-Retrieval **không** dùng câu hỏi thô. Step 1 (`step_rewrite`) gọi LLM (Gemma trên
-GPU) sinh ra **2 trường** — xem `retrieval/query_rewriter.py`:
-
-- **`rewritten_query`** — truy vấn cô đọng, tập trung khái niệm pháp lý cốt lõi.
-  Ví dụ: *"Công ty tôi có 5 người, có phải DNNVV không?"* →
-  *"tiêu chí xác định doanh nghiệp nhỏ và vừa số lao động vốn doanh thu"*.
-- **`topic_description`** — mô tả CHỦ ĐỀ + THUẬT NGỮ + loại văn bản liên quan
-  (Luật/Nghị định/Thông tư), **cố ý không chứa số liệu cụ thể hay "Điều X"**.
-
-> **Vì sao không dùng HyDE?** HyDE (sinh câu trả lời giả để embed) dễ bịa số hiệu
-> luật / con số lỗi thời. `topic_description` neo embedding vào *không gian khái
-> niệm* thay vì *facts bịa*, an toàn hơn cho domain pháp lý.
-
-Nếu LLM lỗi mạng / parse hỏng → rewriter **fallback** trả về câu hỏi gốc cho
-`rewritten_query` (không bao giờ chặn pipeline).
+- `rrf_top200` là output chính của global retrieval, giống luồng cũ.
+- `intent_hits` là nhánh phụ, chỉ dùng để mở rộng keep set khi đánh giá recall.
+- Intent hits không thay thế `rewritten_query`.
+- Intent hits không đi vào main RRF global.
+- Intent hits không làm thay đổi thứ tự RRF của `rrf_top200`.
 
 ---
 
-## 3. Nhánh A — BM25 (lexical search)
+## 2. Existing Rewrite Chain
 
-File: `retrieval/bm25_index.py`. Đây là **Okapi BM25** tự cài (inverted index),
-không phụ thuộc dịch vụ ngoài → cực nhanh, chạy in-process. BM25 chạy cho
-**truy vấn rewritten** (hoặc câu hỏi gốc nếu rewrite rỗng).
+File: `retrieval/query_rewriter.py`
 
-### 3.1 Tokenizer
-`vietnamese_simple_tokenize()`: lowercase → bỏ dấu câu (`[^\w\s]`, giữ ký tự
-tiếng Việt có dấu) → tách theo khoảng trắng → bỏ token độ dài ≤ 1.
-*(Tokenize theo âm tiết, không tách từ ghép — đơn giản, đủ tốt cho BM25.)*
+Input:
 
-### 3.2 Index
-Mỗi **điều luật** (article) được index trên `dieu_title + content`:
-- `_inverted`: `term → [(doc_idx, term_freq), ...]`
-- `_idf[term] = log((N - df + 0.5) / (df + 0.5) + 1)`
-- `_avgdl`: độ dài tài liệu trung bình (chuẩn hóa độ dài).
-- Tham số Okapi: `K1 = 1.5`, `B = 0.75`.
-
-### 3.3 Công thức tính điểm
-Với mỗi token trong truy vấn, cộng dồn vào mỗi tài liệu chứa token:
-
-```
-score += idf(token) · [ f·(K1+1) ] / [ f + K1·(1 − B + B·dl/avgdl) ]
+```text
+original_question
 ```
 
-(`f` = tần suất token trong tài liệu, `dl` = độ dài tài liệu). Trả về
-`top_k_bm25 = 80` cặp `(chunk_id, score)` sắp xếp giảm dần.
-
-Index được build offline (`python retrieval/bm25_index.py`) và lưu pickle
-`retrieval/data/bm25_index.pkl`; runtime chỉ `load()`.
-
----
-
-## 4. Nhánh B — Dense / semantic search
-
-File: `retrieval/embedder.py` (+ override GPU trong `gpu_backends.py`),
-truy vấn vector qua **Qdrant**. `step_retrieve` embed `rewritten_query` và
-`topic_description` (nếu khác) bằng `embedder.embed_query(text)` cho **từng** truy vấn.
-
-### 4.1 Embedding model — Qwen3-Embedding-8B (4096 chiều)
-Model **bất đối xứng (asymmetric)** giữa query và document:
-
-- **Query** được bọc tiền tố hướng dẫn (instruction-prefixed) — hằng số
-  `_EMBED_INSTRUCTION` **hardcode** trong `embedder.py::_format_query`:
-  ```
-  Instruct: {_EMBED_INSTRUCTION}
-  Query: {text}
-  ```
-- **Document** được embed **THÔ** (chỉ `law_id | law_type law_name | dieu_number`
-  + title + 512 ký tự đầu content), **không** có tiền tố Instruct.
-
-> **Hệ quả vận hành quan trọng:** instruction chỉ áp lên vector *query* lúc chạy →
-> đổi nó **không cần re-embed lại ~113k điều** trong corpus.
-
-Vector luôn được **L2-normalize** (cosine similarity ⇔ dot product).
-
-### 4.2 Hai backend embed (cùng một interface)
-- **GPU** (`GpuEmbedder._embed`): gọi endpoint Vertex AI **dedicated** qua route
-  TEI `:predict` (KHÔNG phải OpenAI):
-  ```
-  POST https://{embed_dns}/v1/projects/{proj}/locations/{embed_region}/endpoints/{id}:predict
-  body  {"instances": [{"inputs": "<text>"}, ...]}
-  resp  {"predictions": [[[...4096 floats...]], ...]}
-  ```
-  Embed nằm ở **region riêng** (`asia-northeast1`), khác region LLM
-  (`asia-southeast1`) → config tách `embed_region`/`embed_dns`. **DNS dedicated xoay
-  vòng mỗi lần redeploy** → phải refresh `GPU_EMBED_DNS` trong `.env`.
-
-### 4.3 Truy vấn Qdrant
-`pipeline.py::_dense_search` gọi `qdrant.query_points(collection, query=vec,
-limit=top_k_dense=80, with_payload=True)` cho **mỗi vector**, có **retry backoff**
-(5 lần, 1→2→4…s) để chịu được Qdrant chớp tắt. Trả về `(hits, payloads)`:
-- `hits = [(chunk_id, score), ...]` — **keyed bằng `chunk_id` thô** lấy từ payload
-  (không phải UUID điểm), để khớp với key của BM25 khi fusion.
-- `payloads = {chunk_id: payload}` — để dựng lại điều cho hit chỉ có ở nhánh dense
-  (gom dồn từ mọi vector vào một dict chung).
-
-Collection: `legal_vn_garden` (4096d, ~113.5k điểm, Qdrant local Docker
-`localhost:6333`).
-
----
-
-## 5. Các ranked list đi vào fusion
-
-`step_retrieve` tạo ra **2–3 ranked list**:
-
-| Nguồn | Số list |
-|-------|---------|
-| BM25(`rewritten_query`) | 1 |
-| Dense(`rewritten_query`) | 1 |
-| Dense(`topic_description`) *(nếu khác rewritten)* | 0–1 |
-
-→ Tối thiểu 2 list (khi `topic_description` trùng/rỗng), tối đa 3. RRF **thưởng**
-điều xuất hiện nhất quán ở cả nhánh lexical lẫn semantic → recall ổn định hơn.
-
----
-
-## 6. Hợp nhất — Reciprocal Rank Fusion (RRF)
-
-File: `retrieval/hybrid_search.py::rrf_fusion`.
+Output:
 
 ```python
-score[chunk_id] = Σ_lists  1 / (k + rank_trong_list)      # k = rrf_k = 60
+{
+    "rewritten_query": str,
+    "topic_description": str,
+}
 ```
 
-Đặc điểm:
-- **Dựa trên THỨ HẠNG, không dựa trên điểm thô** → không cần chuẩn hóa thang điểm
-  giữa BM25 (không chặn trên) và cosine (0–1). Đây là điểm mấu chốt khiến RRF bền
-  (không list nào "áp đảo" bằng scale).
-- Hằng số `k = 60` làm phẳng ảnh hưởng của các rank đầu (giảm thống trị của top-1).
-- Một chunk có mặt ở nhiều list → cộng dồn nhiều số hạng → đẩy lên cao.
+Luồng này giữ nguyên như trước. Prompt rewrite hiện tại vẫn chỉ có nhiệm vụ:
 
-Sau fusion, cắt lấy **`top_k_fusion = 50`** ứng viên hàng đầu.
+- tạo `rewritten_query` cô đọng, tối ưu cho global retrieval;
+- tạo `topic_description` mô tả chủ đề, thuật ngữ, loại văn bản liên quan;
+- không sinh intent;
+- không quyết định multi-hop;
+- không bị gộp chung với decomposition prompt.
 
----
+Fallback:
 
-## 7. Resolve payloads — gắn nội dung điều
-
-`fused` mới chỉ là `(chunk_id, rrf_score)`. Bước resolve gắn **payload đầy đủ**
-(law_id, law_name, dieu_number, dieu_title, content, `relevant_doc_str`,
-`relevant_article_str`) cho từng chunk:
-
-1. Tra trong **BM25 payload** trước (`get_payload`) — đa số hit có sẵn.
-2. Hit chỉ có ở nhánh dense → lấy từ **`payloads` của Qdrant** đã gom ở §4.3
-   (chuẩn hóa qua `_normalize_payload`).
-3. Không thấy đâu cả → giữ tối thiểu `{"chunk_id": ...}` (hiếm).
-
-Kết quả: `state.fused_results` = list **≤ 50** dict, mỗi dict kèm `rrf_score`.
-
-### Fallback an toàn
-Nếu danh sách rỗng (vd `rewritten_query` lệch hẳn) → chạy lại **BM25 trên câu hỏi
-GỐC** với `top_k_fusion`, đảm bảo **không bao giờ** đưa context rỗng xuống generate.
+- Nếu LLM lỗi hoặc JSON parse lỗi, `rewritten_query` fallback về câu hỏi gốc.
+- `topic_description` có thể rỗng.
+- Pipeline vẫn chạy tiếp.
 
 ---
 
-## 8. Các tham số điều chỉnh (config `retrieval:`)
+## 3. Legal Intent Decomposition Chain
 
-Từ `config_gpu.yaml` (đường chạy hiện tại):
+File: `retrieval/intent_decomposer.py`
 
-| Tham số | Giá trị | Ý nghĩa |
-|---------|---------|---------|
-| `top_k_bm25` | 80 | số hit BM25 lấy ra |
-| `top_k_dense` | 80 | `limit` mỗi lượt query Qdrant |
-| `top_k_fusion` | **50** | kích thước pool sau RRF → đầu vào rerank |
-| `top_k_rerank` | 6 | số điều trích dẫn cuối (single-tier LLM) |
-| `rrf_k` | 60 | hằng số RRF |
-| `embedding.dimension` | 4096 | = `qdrant.vector_size` (bắt buộc khớp) |
+Đây là một chain riêng, gọi LLM thêm một lần sau rewrite.
 
-> **Bất biến bắt buộc:** `embedding.dimension == qdrant.vector_size` (lệch →
-> validate fail). Phễu phải đơn điệu: `top_k_rerank ≤ top_k_fusion`.
+Input:
 
-> **Hai config song song:** `config_gpu.yaml` (Qwen3 + Gemma trên endpoint GPU) và
-> `config_vertex.yaml` (Gemini). Hai config **hoạt động giống hệt nhau** — cùng
-> tham số retrieval/rerank/generate, **chỉ khác model** (và `dimension`/collection
-> đi kèm). Không còn tầng BGE two-tier hay decomposition.
-
----
-
-## 9. Bàn giao cho tầng Rerank
-
-`state.fused_results` (≤ 50 ứng viên) là **đầu ra của retrieval**. Tầng sau là
-**single-tier** whole-pool LLM rerank:
-
-```
-retrieval 50  ──►  LLM whole-pool rerank  ──►  6 (cited)
-                   (1 call, thang điểm 0–10 chung)     (top_k_rerank)
+```text
+original_question
 ```
 
-> **Lịch sử:** TIP-013/014 từng dùng **two-tier** `80 → BGE cross-encoder → 15 →
-> CoT → 5`. TIP-016 sweep ngưỡng cho thấy **mọi biến thể two-tier đều thua**
-> baseline single-tier (F2≈0.5033) → revert về single-tier. TIP-017 thêm query
-> decomposition nhưng cũng regress → TIP-019 **bỏ luôn decomposition**. Code
-> two-tier và decomposition đã được gỡ hẳn.
+Output:
 
-Retrieval **không** quyết định điều nào được trích dẫn — nó chỉ đảm bảo **recall**:
-"điều đúng phải nằm đâu đó trong 50". Tầng rerank (cùng prompt + cùng cách chấm
-0–10 cho cả backend gpu lẫn vertex) mới chọn ra điều trích dẫn cuối.
+```python
+@dataclass
+class IntentAnalysis:
+    intents: list[str]
+```
+
+Không dùng:
+
+- `LegalIntent`
+- `intent_id`
+- `priority`
+- `legal_area`
+- `is_multihop`
+
+Lý do: output càng đơn giản thì LLM càng ổn định, dễ parse, ít làm hỏng pipeline.
+
+### 3.1 Định nghĩa intent
+
+Mỗi intent là một truy vấn pháp lý độc lập, có thể dùng trực tiếp cho:
+
+```text
+BM25(intent)
+Dense(intent)
+```
+
+Intent tốt:
+
+```json
+[
+  "xác định hành vi xâm phạm quyền tác giả đối với phần mềm",
+  "xác định thiệt hại và tổn thất cơ hội kinh doanh do hành vi xâm phạm quyền tác giả",
+  "hồ sơ tài liệu chứng cứ khi yêu cầu xử lý hành vi xâm phạm quyền tác giả"
+]
+```
+
+Intent không tốt:
+
+```json
+[
+  "quyền tác giả",
+  "thiệt hại",
+  "hồ sơ"
+]
+```
+
+Vì các chuỗi trên chỉ là keyword/topic label, không phải retrieval query độc lập.
+
+### 3.2 Prompt decomposition
+
+Prompt decomposition yêu cầu LLM trả JSON duy nhất:
+
+```json
+{
+  "intents": [
+    "..."
+  ]
+}
+```
+
+Rules chính:
+
+- Luôn trả ít nhất 1 intent.
+- Câu đơn giản/single-hop: thường trả 1 intent.
+- Câu multi-hop: trả 2-6 intents.
+- Mỗi intent phải là một retrieval query đầy đủ.
+- Không output keyword-only.
+- Không copy nguyên văn toàn bộ câu hỏi.
+- Không thêm giải thích.
+- Không đưa tên luật nếu câu hỏi không nêu rõ hoặc không strongly implied.
+
+Fallback:
+
+- Nếu LLM lỗi hoặc parse lỗi, `intents = [original_question]`.
+- Điều này giữ pipeline không bị gãy.
 
 ---
 
-## 10. Bản đồ code (tham chiếu nhanh)
+## 4. Global Retrieval
 
-| Chức năng | Vị trí |
-|-----------|--------|
-| Orchestrate retrieval (BM25 + dense + RRF) | `pipeline.py::step_retrieve` |
-| Query rewriting (rewritten_query + topic_description) | `retrieval/query_rewriter.py` |
-| Dense search + retry + payload keying | `pipeline.py::_dense_search` |
+File chính: `pipeline.py::step_retrieve`
+
+Global retrieval dùng output của rewrite chain:
+
+```python
+query = state.rewritten_query or state.question
+```
+
+Sau đó chạy:
+
+```python
+bm25_hits = BM25(rewritten_query, top_k_bm25)
+dense_hits = Dense(rewritten_query, top_k_dense)
+dense_topic_hits = Dense(topic_description, top_k_dense)  # nếu topic khác query
+```
+
+Các ranked list được fusion bằng RRF:
+
+```python
+rrf_top200 = rrf_fusion(
+    [
+        bm25_hits,
+        dense_hits,
+        dense_topic_hits,
+    ],
+    k=rrf_k,
+)[:top_k_fusion]
+```
+
+Với config hiện tại:
+
+```yaml
+retrieval:
+  top_k_dense: 240
+  top_k_bm25: 240
+  top_k_fusion: 200
+  rrf_k: 60
+```
+
+Kết quả:
+
+```python
+state.fused_results = global_results
+```
+
+Invariant quan trọng:
+
+```text
+state.fused_results chỉ chứa global RRF results.
+Intent hits không được append vào state.fused_results.
+```
+
+Điều này giữ nguyên behavior của luồng cũ.
+
+---
+
+## 5. Intent Retrieval
+
+Intent retrieval chạy sau khi đã có `state.intent_queries`.
+
+Với mỗi intent:
+
+```python
+bm25_i = BM25(intent, top_k=50)
+dense_i = Dense(intent, top_k=50)
+
+intent_rrf = rrf_fusion(
+    [
+        bm25_i,
+        dense_i,
+    ],
+    k=rrf_k,
+)
+
+intent_hits |= intent_rrf[:10]
+```
+
+Trong code:
+
+- `pipeline.py::_retrieve_intent_hits`
+- output lưu ở `state.intent_hits`
+
+Config:
+
+```yaml
+retrieval:
+  enable_intent_retrieval: true
+  intent_top_k_bm25: 50
+  intent_top_k_dense: 50
+  intent_top_k_rrf: 10
+```
+
+Metadata gắn trên intent hits:
+
+```python
+{
+    "retrieval_source": "intent",
+    "from_intent": True,
+    "intent_ids": [1, ...],
+    "intent_queries": ["...", ...],
+    "intent_rank": int,
+    "intent_rrf_score": float,
+}
+```
+
+Các metadata này chỉ để audit/debug. Data model chính của decomposer vẫn chỉ là `list[str]`.
+
+---
+
+## 6. Candidate Keep Set
+
+Luồng đánh giá hiện tại dựa trên BGE probe và leaderboard.
+
+Old keep:
+
+```python
+keep_old = top80_bge | top80_rrf
+```
+
+New keep:
+
+```python
+keep_new = top80_bge | top80_rrf | intent_hits
+```
+
+Trong đó:
+
+- `top80_bge`: lấy từ BGE score trên global RRF pool.
+- `top80_rrf`: lấy theo thứ tự global RRF pool.
+- `intent_hits`: top10 mỗi intent từ nhánh intent retrieval.
+
+Điểm quan trọng:
+
+- `keep_new` là set.
+- Không sort toàn bộ keep.
+- Không lấy topK từ keep.
+- Mục tiêu của keep là tăng recall evidence coverage trước bước final verification/ranking.
+
+---
+
+## 7. BGE Probe Integration
+
+File: `bge_ab_probe.py`
+
+Per question, probe chạy:
+
+```text
+step_rewrite
+step_decompose
+step_retrieve
+BGE score trên state.fused_results
+```
+
+Điểm cần nhớ:
+
+- BGE vẫn score trên `state.fused_results`, tức global RRF pool cũ.
+- `intent_hits` không được BGE score ở bước này.
+- Output JSON lưu thêm `intent_hits` riêng.
+
+Shape output chính:
+
+```json
+{
+  "id": 1,
+  "question": "...",
+  "rewritten_query": "...",
+  "topic_description": "...",
+  "intents": ["..."],
+  "num_intents": 3,
+  "retrieval_metrics": {
+    "num_intents": 3,
+    "intent_lengths": [64, 82, 71],
+    "global_count": 200,
+    "intent_count": 25,
+    "keep_count": 214,
+    "global_recall": null,
+    "intent_only_recall": null,
+    "keep_recall": null,
+    "cross_document": null
+  },
+  "intent_hits": [
+    {
+      "article": "...",
+      "doc": "...",
+      "intent_ids": [1],
+      "intent_queries": ["..."]
+    }
+  ],
+  "pool": [
+    {
+      "article": "...",
+      "doc": "...",
+      "rrf": 0.03125,
+      "bge": 0.78231
+    }
+  ]
+}
+```
+
+Khi package/analyze:
+
+```python
+rrf_order = pool
+bge_order = sorted(pool, key=lambda c: c["bge"], reverse=True)
+intent_order = entry["intent_hits"]
+
+submission_union = top80_bge + top80_rrf + intent_order
+```
+
+Dedup được xử lý khi tạo `results.json`.
+
+---
+
+## 8. Logging Và Metrics
+
+Pipeline lưu các thông tin sau khi có `scores-detail` hoặc khi chạy BGE probe:
+
+```python
+{
+    "question_id": ...,
+    "original_question": ...,
+    "rewritten_query": ...,
+    "topic_description": ...,
+    "intents": [...],
+    "num_intents": len(intents),
+    "global_candidate_count": len(state.fused_results),
+    "intent_hit_count": len(state.intent_hits),
+    "keep_count": len(global ∪ intent)
+}
+```
+
+Nếu có labels/gold, có thể tính thêm:
+
+```python
+{
+    "global_recall": ...,
+    "intent_only_recall": ...,
+    "keep_recall": ...,
+    "gold_recovered_by_intents": [...]
+}
+```
+
+Trong leaderboard input hiện tại không có gold labels, nên các trường recall để `null`.
+
+---
+
+## 9. BM25
+
+File: `retrieval/bm25_index.py`
+
+BM25 là lexical retrieval in-process:
+
+- index trên `dieu_title + content`;
+- tokenizer đơn giản cho tiếng Việt;
+- dùng Okapi BM25;
+- output là list `(chunk_id, score)`.
+
+BM25 được dùng ở hai nơi:
+
+```text
+Global: BM25(rewritten_query, top_k_bm25=240)
+Intent: BM25(intent, top_k=50)
+```
+
+---
+
+## 10. Dense Retrieval
+
+File:
+
+- `retrieval/embedder.py`
+- `gpu_backends.py::GpuEmbedder`
+- `vertex_backends.py::VertexEmbedder`
+- `pipeline.py::_dense_search`
+
+Dense retrieval dùng Qwen3/Gemini embedding tùy backend.
+
+Global dense:
+
+```text
+Dense(rewritten_query, top_k_dense=240)
+Dense(topic_description, top_k_dense=240)
+```
+
+Intent dense:
+
+```text
+Dense(intent, top_k=50)
+```
+
+`_dense_search` có tham số `limit` tùy nhánh:
+
+- không truyền `limit` -> dùng `top_k_dense`;
+- intent retrieval truyền `limit=intent_top_k_dense`.
+
+---
+
+## 11. RRF
+
+File: `retrieval/hybrid_search.py::rrf_fusion`
+
+Công thức:
+
+```python
+score[chunk_id] += 1 / (rrf_k + rank)
+```
+
+Vì dùng rank thay vì raw score, RRF ghép ổn định giữa:
+
+- BM25 score;
+- dense cosine score;
+- các list từ nhiều query khác nhau.
+
+Global RRF:
+
+```text
+BM25(rewritten) + Dense(rewritten) + Dense(topic)
+```
+
+Intent RRF:
+
+```text
+BM25(intent) + Dense(intent)
+```
+
+Hai loại RRF này độc lập.
+
+---
+
+## 12. Fallbacks
+
+Rewrite fallback:
+
+```text
+rewritten_query = original_question
+topic_description = ""
+```
+
+Decompose fallback:
+
+```text
+intents = [original_question]
+```
+
+Retrieval fallback:
+
+Nếu global retrieval rỗng, chạy lại:
+
+```python
+BM25(original_question, top_k_fusion)
+```
+
+Các fallback này bảo đảm pipeline không bị abort vì một lỗi LLM hoặc retrieval tạm thời.
+
+---
+
+## 13. Bản đồ code
+
+| Chức năng | File |
+|---|---|
+| Orchestrator chính | `pipeline.py` |
+| Rewrite chain cũ | `retrieval/query_rewriter.py` |
+| Intent decomposition chain mới | `retrieval/intent_decomposer.py` |
+| Global retrieval | `pipeline.py::step_retrieve` |
+| Intent retrieval | `pipeline.py::_retrieve_intent_hits` |
+| Dense search helper | `pipeline.py::_dense_search` |
 | RRF | `retrieval/hybrid_search.py::rrf_fusion` |
-| BM25 (index + Okapi) | `retrieval/bm25_index.py` |
-| Embedder (TEI :predict / Gemini) | `gpu_backends.py::GpuEmbedder` / `vertex_backends.py::VertexEmbedder` |
-| Rerank + score-saving (chung 2 backend) | `retrieval/reranker.py::rerank_with_scores` |
+| BM25 | `retrieval/bm25_index.py` |
+| BGE pool + union packaging | `bge_ab_probe.py` |
 
-> Ghi chú kiến trúc: `pipeline.py::step_retrieve` là đường chạy production; mỗi step
-> chạy/test độc lập, backend (gpu | vertex_ai) thay model bằng cách override hook.
-> `HybridSearcher` trong `hybrid_search.py` là bản đóng gói độc lập (mock được để
-> test offline) — không dùng trong production.
+---
+
+## 14. Invariants Cần Giữ
+
+Các invariant này là phần quan trọng nhất của thiết kế hiện tại:
+
+1. `QueryRewriter` không bị sửa prompt để sinh intents.
+2. `LegalIntentDecomposer` là call LLM riêng, input là original question.
+3. `state.fused_results` chỉ chứa global RRF results.
+4. `state.intent_hits` chứa intent rescue candidates riêng.
+5. BGE score vẫn chạy trên global RRF pool.
+6. Keep set mới chỉ được tạo khi analyze/package:
+
+```python
+keep = top80_bge | top80_rrf | intent_hits
+```
+
+7. Mục tiêu đánh giá là `Recall_keep`, không phải MRR hay Recall@40.
