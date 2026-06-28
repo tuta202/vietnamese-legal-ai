@@ -28,6 +28,9 @@ _EMBED_INSTRUCTION = (
     "Tìm kiếm điều luật pháp lý Việt Nam liên quan đến câu hỏi sau"
 )
 _BATCH_SIZE = 32    # default; overridden by config.embedding.batch_size
+_LAW_NAME_MAXCHARS = 220
+_TITLE_MAXCHARS = 180
+_DOC_CONTENT_MAXCHARS = 1000
 
 
 class LegalEmbedder:
@@ -66,14 +69,14 @@ class LegalEmbedder:
         return f"Instruct: {_EMBED_INSTRUCTION}\nQuery: {text}"
 
     def _format_document(self, article: dict) -> str:
-        header = (
-            f"{article.get('law_id', '')} | "
-            f"{article.get('law_type', '')} {article.get('law_name', '')} | "
-            f"{article.get('dieu_number', '')}"
+        law_name = str(article.get("law_name", ""))[:_LAW_NAME_MAXCHARS]
+        title = str(article.get("dieu_title", ""))[:_TITLE_MAXCHARS]
+        content = str(article.get("content", ""))[:_DOC_CONTENT_MAXCHARS]
+        return (
+            f"{article.get('law_type', '')} {law_name}\n"
+            f"{article.get('dieu_number', '')}. {title}\n"
+            f"{content}"
         )
-        title   = article.get("dieu_title", "")
-        content = article.get("content", "")[:512]
-        return f"{header}\n{title}\n{content}"
 
     # ------------------------------------------------------------------
     # Embedding

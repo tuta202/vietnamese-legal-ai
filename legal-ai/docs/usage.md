@@ -207,16 +207,6 @@ python setup_qdrant_cloud.py \
 
 ---
 
-## Rebuild corpus (nếu sửa parser hoặc raw files)
-
-```bash
-python corpus/builder.py
-```
-
-Output: `corpus/data/corpus.json` — hiện tại 1044 articles từ 13 văn bản pháp luật.
-
----
-
 ## Chạy tests
 
 ```bash

@@ -25,34 +25,33 @@ Các file chính:
 
 Luồng hiện tại có hai nhánh retrieval:
 
-```text
-Original question
-  |
-  +--> Existing Rewrite Chain
-  |      |
-  |      +--> rewritten_query
-  |      +--> topic_description
-  |      |
-  |      +--> Global Retrieval
-  |             - BM25(rewritten_query)
-  |             - Dense(rewritten_query)
-  |             - Dense(topic_description)
-  |             |
-  |             +--> RRF
-  |             +--> rrf_top200
-  |
-  +--> Legal Intent Decomposition Chain
-         |
-         +--> intents: list[str]
-         |
-         +--> Intent Retrieval
-                for each intent:
-                  - BM25(intent, top50)
-                  - Dense(intent, top50)
-                  - RRF(intent)
-                  - keep top10
-                |
-                +--> intent_hits
+```mermaid
+flowchart TD
+    Q["Original question"]
+
+    Q --> RW["Existing Rewrite Chain"]
+    RW --> RQ["rewritten_query"]
+    RW --> TD["topic_description"]
+
+    RQ --> GBM25["BM25(rewritten_query)"]
+    RQ --> GDENSE["Dense(rewritten_query)"]
+    TD --> TDENSE["Dense(topic_description)"]
+
+    GBM25 --> GRRF["Global RRF"]
+    GDENSE --> GRRF
+    TDENSE --> GRRF
+    GRRF --> RRF200["rrf_top200"]
+
+    Q --> DEC["Legal Intent Decomposition Chain"]
+    DEC --> INTENTS["intents: list[str]"]
+
+    INTENTS --> LOOP["For each intent"]
+    LOOP --> IBM25["BM25(intent, top50)"]
+    LOOP --> IDENSE["Dense(intent, top50)"]
+    IBM25 --> IRRF["RRF(intent)"]
+    IDENSE --> IRRF
+    IRRF --> ITOP10["keep top10 per intent"]
+    ITOP10 --> IHITS["intent_hits"]
 ```
 
 Điểm quan trọng:

@@ -5,6 +5,7 @@
 results*.json
 submission/
 outputs/
+cache/
 *.zip
 eval/data/eval_predictions.json
 eval/data/eval_results.json
@@ -14,9 +15,8 @@ reembed_checkpoint.json
 corpus/data/hf_cache/
 
 # Expanded corpus is a large rebuildable artifact (~780MB > GitHub 100MB limit) —
-# keep it local, rebuild with `python corpus/hf_ingest.py`. Baseline
-# corpus_v1_1044.json (10.6MB) stays tracked.
-corpus/data/corpus.json
+# Keep all generated corpus JSON local; rebuild through the ingestion/cleaning pipeline.
+corpus/data/*.json
 
 # Corpus build byproducts
 corpus/data/coverage_*.json
