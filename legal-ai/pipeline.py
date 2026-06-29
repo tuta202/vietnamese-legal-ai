@@ -37,7 +37,7 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-_DEFAULT_CFG    = _ROOT / "config_gpu.yaml"
+_DEFAULT_CFG    = _ROOT / "config_gpu_clean.yaml"
 _BM25_PKL       = _ROOT / "retrieval" / "data" / "bm25_index.pkl"
 _CORPUS_JSON    = _ROOT / "corpus" / "data" / "corpus.json"
 
@@ -102,6 +102,7 @@ class LegalAIPipeline:
         self,
         config_path: str | Path | None = None,
         mock: bool = False,
+        bm25_index: BM25Index | None = None,
     ) -> None:
         self.mock = mock
         self.config: RetrievalConfig = load_config(config_path or _DEFAULT_CFG)
@@ -115,7 +116,7 @@ class LegalAIPipeline:
                     + "; ".join(problems)
                 )
 
-        self._bm25 = self._init_bm25()
+        self._bm25 = bm25_index if bm25_index is not None else self._init_bm25()
         (self._embedder, self._rewriter,
          self._reranker, self._generator) = self._make_components()
         self._decomposer = LegalIntentDecomposer(
@@ -125,7 +126,7 @@ class LegalAIPipeline:
         )
         self._qdrant = _MockQdrant() if mock else self._init_qdrant()
 
-        # Score saving — set externally by run_parallel.py --scores-detail.
+        # Optional detailed score logging for diagnostic callers.
         self._scores_detail_path: str | None = None
         self._scores_detail_lock = threading.Lock()
 
@@ -134,7 +135,7 @@ class LegalAIPipeline:
         Build the four neural components for the configured backend.
 
         Two backends are supported, behaving identically and differing only in
-        the underlying models (see config_gpu.yaml / config_vertex.yaml):
+        the underlying models (see config_gpu_clean.yaml / config_vertex_clean.yaml):
           • gpu    → self-deployed Qwen3 + Gemma on GPU endpoints
           • vertex_ai → Gemini
         Both subclass the shared base components (LegalEmbedder/QueryRewriter/
@@ -616,8 +617,8 @@ class LegalAIPipeline:
 def main() -> None:
     parser = argparse.ArgumentParser(description="LegalAI pipeline runner")
     parser.add_argument("--config", default=None,
-                        help="Config YAML (default: config_gpu.yaml; "
-                             "use config_vertex.yaml for the Gemini backend)")
+                        help="Config YAML (default: config_gpu_clean.yaml; "
+                             "use config_vertex_clean.yaml for the Gemini backend)")
     parser.add_argument("--mock",   action="store_true", help="Run in mock mode (no GPU/Docker)")
     parser.add_argument("--input",  required=True, help="JSON file with [{id, question}, ...]")
     parser.add_argument("--output", default="results.json", help="Output results.json path")

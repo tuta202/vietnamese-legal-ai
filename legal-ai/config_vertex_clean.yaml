@@ -5,7 +5,7 @@ backend: vertex_ai
 qdrant:
   url: ${QDRANT_URL}
   api_key: ${QDRANT_API_KEY}
-  collection: legal_vn_vertex_clean_v1
+  collection: legal_vn_vertex_asof_20260301_v1
   vector_size: 3072
   distance: Cosine
 

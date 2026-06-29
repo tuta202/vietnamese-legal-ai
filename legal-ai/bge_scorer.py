@@ -1,11 +1,9 @@
 """
-bge_scorer.py — BGE-reranker-v2-m3 cross-encoder scoring (OFFLINE VALIDATION ONLY).
+bge_scorer.py — shared BGE-reranker-v2-m3 cross-encoder scoring.
 
-This module is deliberately kept OUT of the main pipeline (pipeline.py). It exists
-so the BGE validation tooling (bge_ab_probe.py) can score query–document pairs
-against a self-deployed BAAI/bge-reranker-v2-m3 endpoint and compare BGE ranking
-against RRF ranking on the leaderboard. If validation proves BGE adds value, a
-separate TIP will integrate it into the retrieval pipeline.
+The online answer pipeline class does not invoke BGE directly, but the proven
+submission workflow uses this scorer for intent-wise compression. Both Vertex
+and GPU configurations therefore share the same BGE endpoint contract.
 
 Endpoint shape — a Vertex AI *dedicated* endpoint serving the model in a TEI
 container, called via the :predict API (NOT the OpenAI route), exactly like the

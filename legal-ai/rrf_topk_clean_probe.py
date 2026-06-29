@@ -36,6 +36,7 @@ def retrieve_rrf_only(
     question: str,
     rewritten_query: str | None = None,
     topic_description: str | None = None,
+    strict_errors: bool = False,
 ) -> dict:
     try:
         state = PipelineState(question_id=qid, question=question)
@@ -50,6 +51,8 @@ def retrieve_rrf_only(
         state = pipeline.step_format(state)
         return state.submission_entry
     except Exception:
+        if strict_errors:
+            raise
         log.exception("Q%s failed; emitting empty fallback", qid)
         return {
             "id": qid,
@@ -131,7 +134,7 @@ def main() -> None:
     parser.add_argument("--cached-analysis", default="")
     parser.add_argument("--output", default="outputs/rrf_top300_clean_results.json")
     parser.add_argument("--submission-prefix", default="outputs/submission_rrf_top")
-    parser.add_argument("--bm25-index", default="retrieval/data/bm25_index_clean_v1.pkl")
+    parser.add_argument("--bm25-index", default="retrieval/data/bm25_index_asof_20260301.pkl")
     parser.add_argument("--workers", type=int, default=20)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
@@ -143,7 +146,12 @@ def main() -> None:
         help="Per-source BM25/dense depth before RRF. Defaults to --top-k.",
     )
     parser.add_argument("--export-ks", default="100,200,300")
-    parser.add_argument("--expected-count", type=int, default=86492)
+    parser.add_argument("--expected-count", type=int, default=82570)
+    parser.add_argument(
+        "--strict-errors",
+        action="store_true",
+        help="Leave failed questions incomplete for resume instead of emitting empty fallbacks.",
+    )
     args = parser.parse_args()
 
     cached_analysis = Path(args.cached_analysis) if args.cached_analysis else None
@@ -151,13 +159,13 @@ def main() -> None:
     if args.limit:
         questions = questions[: args.limit]
 
-    pipeline = LegalAIPipeline(config_path=args.config, mock=False)
+    clean_bm25 = load_clean_bm25(Path(args.bm25_index), args.expected_count)
+    pipeline = LegalAIPipeline(config_path=args.config, mock=False, bm25_index=clean_bm25)
     source_top_k = args.source_top_k or args.top_k
     pipeline.config.retrieval.top_k_fusion = args.top_k
     pipeline.config.retrieval.top_k_dense = max(pipeline.config.retrieval.top_k_dense, source_top_k)
     pipeline.config.retrieval.top_k_bm25 = max(pipeline.config.retrieval.top_k_bm25, source_top_k)
     pipeline.config.retrieval.enable_intent_retrieval = False
-    pipeline._bm25 = load_clean_bm25(Path(args.bm25_index), args.expected_count)
 
     out = Path(args.output)
     results: dict = {}
@@ -195,11 +203,18 @@ def main() -> None:
                 q["question"],
                 q.get("rewritten_query"),
                 q.get("topic_description"),
+                args.strict_errors,
             ): q["id"]
             for q in todo
         }
         for fut in as_completed(futures):
-            row = fut.result()
+            qid = futures[fut]
+            try:
+                row = fut.result()
+            except Exception as exc:
+                log.error("Q%s failed and remains incomplete: %s", qid, exc)
+                processed += 1
+                continue
             with lock:
                 results[row["id"]] = row
                 processed += 1
@@ -214,6 +229,11 @@ def main() -> None:
                         eta / 60,
                     )
                     persist_ordered(out, questions, results)
+
+    missing = [q["id"] for q in questions if q["id"] not in results]
+    if missing and args.strict_errors:
+        persist_ordered(out, questions, results)
+        raise RuntimeError(f"{len(missing)} global retrieval rows missing; resume required: {missing[:20]}")
 
     for q in questions:
         results.setdefault(

@@ -28,6 +28,7 @@ MANIFEST
 
 # Unit test / coverage
 .pytest_cache/
+.test-tmp*/
 .cache/
 htmlcov/
 .tox/

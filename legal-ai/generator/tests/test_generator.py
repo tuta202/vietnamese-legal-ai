@@ -234,9 +234,9 @@ class TestGeneratorConfig:
     def test_config_generator_section_loaded(self):
         from pathlib import Path
         from retrieval.config import load_config
-        cfg_path = Path(__file__).resolve().parent.parent.parent / "config_gpu.yaml"
+        cfg_path = Path(__file__).resolve().parent.parent.parent / "config_gpu_clean.yaml"
         if not cfg_path.exists():
-            pytest.skip("config_gpu.yaml not found")
+            pytest.skip("config_gpu_clean.yaml not found")
         cfg = load_config(cfg_path)
         assert cfg.generator.temperature == 0.1
         assert cfg.generator.max_tokens == 3000

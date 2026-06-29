@@ -352,9 +352,9 @@ class TestConfigLoad:
         assert cfg.retrieval.top_k_rerank == 7
 
     def test_load_from_yaml(self):
-        config_path = Path(__file__).resolve().parent.parent.parent / "config_gpu.yaml"
+        config_path = Path(__file__).resolve().parent.parent.parent / "config_gpu_clean.yaml"
         if not config_path.exists():
-            pytest.skip("config_gpu.yaml not found")
+            pytest.skip("config_gpu_clean.yaml not found")
         cfg = load_config(config_path)
         assert cfg.backend == "gpu"
         assert cfg.qdrant.collection == "legal_vn_garden"

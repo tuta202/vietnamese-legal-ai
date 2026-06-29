@@ -15,9 +15,9 @@ from retrieval.bm25_index import BM25Index  # noqa: E402
 def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Build BM25 over the cleaned legal corpus.")
-    parser.add_argument("--corpus", default="corpus/data/corpus_clean.json")
-    parser.add_argument("--output", default="retrieval/data/bm25_index_clean_v1.pkl")
-    parser.add_argument("--expected-count", type=int, default=86492)
+    parser.add_argument("--corpus", default="corpus/data/corpus_clean_asof_20260301.json")
+    parser.add_argument("--output", default="retrieval/data/bm25_index_asof_20260301.pkl")
+    parser.add_argument("--expected-count", type=int, default=82570)
     args = parser.parse_args()
 
     corpus_path = Path(args.corpus)

@@ -5,7 +5,7 @@ the model-call hook — exactly mirroring vertex_backends.py.
 
 Every component runs an open-source model served on a self-deployed Vertex AI
 Online Endpoint (GPU). There is no Gemini fallback here — for the Gemini stack
-use `backend: vertex_ai` (config_vertex.yaml) instead. Clean separation:
+use `backend: vertex_ai` (config_vertex_clean.yaml) instead. Clean separation:
   • vertex_ai → Gemini everywhere
   • gpu       → self-deployed open-source models everywhere
 
@@ -27,6 +27,8 @@ this module — or constructing any class with mock/dry_run=True — never touch
 them. Shared, provider-agnostic helpers come from backends_common.
 """
 from __future__ import annotations
+
+import threading
 
 import numpy as np
 
@@ -69,6 +71,7 @@ class RerankError(GpuError):
 
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 _creds = None   # module-level cached ADC credentials
+_creds_lock = threading.Lock()
 
 
 def _gcp_token() -> str:
@@ -77,17 +80,19 @@ def _gcp_token() -> str:
     import google.auth  # lazy
     from google.auth.transport.requests import Request  # lazy
 
-    if _creds is None:
-        _creds, _ = google.auth.default(scopes=_SCOPES)
-    if not _creds.valid:
-        _creds.refresh(Request())
-    return _creds.token
+    with _creds_lock:
+        if _creds is None:
+            _creds, _ = google.auth.default(scopes=_SCOPES)
+        if not _creds.valid:
+            _creds.refresh(Request())
+        return _creds.token
 
 
 def _reset_creds() -> None:
     """Drop the cached credentials so the next token() mints a fresh one."""
     global _creds
-    _creds = None
+    with _creds_lock:
+        _creds = None
 
 
 def _gpu_client(g: GpuConfig, endpoint_id: str):
@@ -110,6 +115,36 @@ def _gpu_client(g: GpuConfig, endpoint_id: str):
 def _gpu_retry(fn, attempts: int):
     """Gpu retry: transient backoff + bearer-token refresh on 401."""
     return retry_transient(fn, attempts=attempts, base=4.0, refresh_auth=_reset_creds)
+
+
+def gpu_chat_complete(
+    config: RetrievalConfig,
+    *,
+    system: str,
+    user: str,
+    temperature: float = 0.0,
+    max_tokens: int = 2048,
+) -> str:
+    """Call the configured Gemma endpoint for provider-neutral LLM stages."""
+    g = config.gpu
+
+    def call() -> str:
+        client = _gpu_client(g, g.llm_endpoint_id)
+        response = client.chat.completions.create(
+            model=g.llm_model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+    try:
+        return _gpu_retry(call, g.max_retries + 2)
+    except Exception as exc:
+        raise GenerationError(f"gpu chat completion failed: {exc}") from exc
 
 
 # ---------------------------------------------------------------------------

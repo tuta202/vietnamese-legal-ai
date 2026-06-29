@@ -148,6 +148,22 @@ class LegalIntentDecomposer:
         except Exception:
             return IntentAnalysis(intents=[question])
 
+    def decompose_strict(self, question: str) -> IntentAnalysis:
+        """Decompose without falling back to the original question on failures."""
+        if self.mock:
+            return IntentAnalysis(intents=[question])
+        messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+        messages.extend(_FEW_SHOTS)
+        messages.append({"role": "user", "content": question})
+        raw = self._chat_complete(messages)
+        data = self._json_from_text(raw)
+        if not isinstance(data, dict):
+            raise ValueError("intent response must be a valid JSON object")
+        intents = self._sanitize_intents(data.get("intents"))
+        if not intents:
+            raise ValueError("intent response contains no valid intents")
+        return IntentAnalysis(intents=intents)
+
     def _chat_complete(self, messages: list[dict]) -> str:
         if self._chat_complete_override is not None:
             return self._chat_complete_override(messages)

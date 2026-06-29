@@ -120,11 +120,17 @@ def main() -> None:
     parser.add_argument("--status-csv", default="outputs/vbpl_full_corpus_status.csv")
     parser.add_argument("--output-dir", default="outputs/stage1_cleaned_before_final_collective")
     parser.add_argument("--fallback-penalty-if-empty", action="store_true", default=True)
+    parser.add_argument(
+        "--skip-invalid",
+        action="store_true",
+        help="Skip status-CSV filtering when the corpus/index already enforces the as-of cutoff.",
+    )
+    parser.add_argument("--strict-errors", action="store_true")
     args = parser.parse_args()
 
     rows = read_json(Path(args.input_diagnostics))
     lookup = ArticleLookup(args.corpus)
-    class_by_law = load_effective_classes(Path(args.status_csv))
+    class_by_law = {} if args.skip_invalid else load_effective_classes(Path(args.status_csv))
 
     out_rows: list[dict[str, Any]] = []
     before_sizes: list[int] = []
@@ -161,6 +167,8 @@ def main() -> None:
         for article_id in after_invalid:
             article = lookup.get(article_id)
             if article is None:
+                if args.strict_errors:
+                    raise KeyError(f"Article is missing from corpus lookup: {article_id}")
                 missing_lookup += 1
                 final.append(article_id)
                 continue

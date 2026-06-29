@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config_gpu.yaml"
+_DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config_gpu_clean.yaml"
 # .env lives at the project root (legal-ai/), one level up from retrieval/.
 _DOTENV_PATH = Path(__file__).resolve().parent.parent / ".env"
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
@@ -134,8 +134,8 @@ class BgeConfig:
     BGE reranker endpoint (BAAI/bge-reranker-v2-m3) — a cross-encoder deployed on
     GPU (Vertex dedicated endpoint, TEI :predict route). SHARED by both backends:
     the gpu and vertex_ai stacks both call this same endpoint for reranking. Used
-    by the offline validation tooling (bge_scorer.py / bge_ab_probe.py); empty
-    until deployed. `dns` empty → the shared regional aiplatform domain is used
+    by the intent-wise compression stage through bge_scorer.py. `dns` empty →
+    the shared regional aiplatform domain is used
     (only works for non-dedicated endpoints); set it for a dedicated endpoint.
     """
     endpoint_id: str = ""

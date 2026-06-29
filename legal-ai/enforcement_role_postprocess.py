@@ -225,6 +225,7 @@ def main() -> None:
     parser.add_argument("--input", default=str(DEFAULT_INPUT))
     parser.add_argument("--corpus", default=str(DEFAULT_CORPUS))
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--strict-errors", action="store_true")
     args = parser.parse_args()
 
     input_rows = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -241,6 +242,10 @@ def main() -> None:
     for row in input_rows:
         original = dedupe_keep_order(row.get("relevant_articles", []))
         hydrated = {article_id: lookup.get(article_id) for article_id in original}
+        if args.strict_errors:
+            missing = [article_id for article_id, article in hydrated.items() if article is None]
+            if missing:
+                raise KeyError(f"Q{row.get('id')} articles missing from corpus lookup: {missing[:5]}")
         missing_lookup += sum(article is None for article in hydrated.values())
         non_enforcement_ids = {
             article_id

@@ -157,6 +157,34 @@ class QueryRewriter:
             # Network / parse failure → fall back to original question
             return RewriteResult(rewritten_query=question, topic_description="")
 
+    def rewrite_strict(self, question: str) -> RewriteResult:
+        """Rewrite without technical fallbacks; invalid responses raise for resume."""
+        if self.mock:
+            return RewriteResult(rewritten_query=question, topic_description=question)
+        messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
+        messages.extend(_FEW_SHOTS)
+        messages.append({"role": "user", "content": question})
+        raw = self._chat_complete(messages)
+        cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.MULTILINE)
+        cleaned = re.sub(r"```\s*$", "", cleaned, flags=re.MULTILINE)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError:
+            match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
+            if not match:
+                raise ValueError("rewrite response does not contain a JSON object")
+            data = json.loads(match.group(0))
+        if not isinstance(data, dict):
+            raise ValueError("rewrite response must be a JSON object")
+        rewritten_query = str(data.get("rewritten_query") or "").strip()
+        topic_description = str(data.get("topic_description") or "").strip()
+        if not rewritten_query or not topic_description:
+            raise ValueError("rewrite response is missing required fields")
+        return RewriteResult(
+            rewritten_query=rewritten_query,
+            topic_description=topic_description,
+        )
+
     # ------------------------------------------------------------------
     # Model-call hook — overridden by Vertex subclass (only this differs)
     # ------------------------------------------------------------------

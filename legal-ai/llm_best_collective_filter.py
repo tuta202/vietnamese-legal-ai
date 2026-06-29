@@ -17,6 +17,7 @@ if str(ROOT) not in sys.path:
 
 from article_lookup import ArticleLookup  # noqa: E402
 from llm_candidate_verifier import (  # noqa: E402
+    acquire_cache_run_lock,
     build_candidate_articles,
     chunks,
     dedupe_keep_order,
@@ -188,18 +189,27 @@ def parse_collective_json(raw: str, key_to_id: dict[str, str]) -> tuple[dict | N
         return None, False
     if not isinstance(data, dict):
         return None, False
-    keys = data.get("selected_article_keys", [])
+    if "selected_article_keys" not in data:
+        return None, False
+    keys = data["selected_article_keys"]
     if not isinstance(keys, list):
-        keys = []
+        return None, False
+    normalized_keys = [str(key).strip() for key in keys]
+    if any(key not in key_to_id for key in normalized_keys):
+        return None, False
     selected: list[str] = []
-    for key in keys:
-        article_id = key_to_id.get(str(key).strip())
-        if article_id and article_id not in selected:
+    for key in normalized_keys:
+        article_id = key_to_id[key]
+        if article_id not in selected:
             selected.append(article_id)
     confidence = str(data.get("confidence", "low")).lower().strip()
     if confidence not in {"high", "medium", "low"}:
         confidence = "low"
-    return {"selected_article_ids": selected, "selected_article_keys": keys, "confidence": confidence}, True
+    return {
+        "selected_article_ids": selected,
+        "selected_article_keys": normalized_keys,
+        "confidence": confidence,
+    }, True
 
 
 def call_collective(
@@ -284,6 +294,8 @@ def process_question(
         }
 
     candidates, missing = build_candidate_articles(original, lookup, content_max_chars=content_max_chars)
+    if strict_errors and missing:
+        raise RuntimeError(f"collective missing {len(missing)} hydrated articles for question {qid}")
     if not candidates:
         return {
             **row,
@@ -346,6 +358,10 @@ def process_question(
                 content_max_chars=content_max_chars,
             )
             missing.extend(final_missing)
+            if strict_errors and final_missing:
+                raise RuntimeError(
+                    f"collective global round missing {len(final_missing)} hydrated articles for question {qid}"
+                )
             result = call_collective(
                 config,
                 question,
@@ -471,6 +487,7 @@ def main() -> None:
     intents = load_legal_intents(Path(args.intent_results))
     lookup = ArticleLookup(args.corpus)
     cache_path = Path(args.cache)
+    acquire_cache_run_lock(cache_path)
     prepare_cache_for_run(cache_path, args.resume)
     cached = load_cache(cache_path) if args.resume else {}
     todo = [row for row in rows if str(row["id"]) not in cached]

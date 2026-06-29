@@ -13,6 +13,7 @@ import math
 import pickle
 import re
 import sys
+import unicodedata
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Iterator
@@ -28,7 +29,7 @@ _INDEX_PATH = Path(__file__).resolve().parent / "data" / "bm25_index.pkl"
 
 def vietnamese_simple_tokenize(text: str) -> list[str]:
     """Lowercase, strip punctuation, split on whitespace. Keeps Vietnamese chars."""
-    text = text.lower()
+    text = unicodedata.normalize("NFC", text).lower()
     text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
     return [t for t in text.split() if len(t) > 1]
 

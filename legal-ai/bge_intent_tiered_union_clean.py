@@ -59,17 +59,28 @@ def load_intent_results(path: Path) -> tuple[dict[object, list[str]], dict[objec
     for row in rows:
         qid = row["id"]
         intents_by_qid[qid] = [str(x).strip() for x in row.get("legal_intents", []) if str(x).strip()]
-        hits_by_qid[qid] = [
-            {
-                "article": norm_text(item.get("article", "")),
-                "doc": norm_text(item.get("doc", "")) or article_to_doc(norm_text(item.get("article", ""))),
-                "intent_ids": item.get("intent_ids", []),
-                "intent_rank": item.get("intent_rank") or 10**9,
-                "intent_rrf_score": float(item.get("intent_rrf_score") or item.get("rrf_score") or 0.0),
-            }
-            for item in row.get("intent_hits", [])
-            if item.get("article")
-        ]
+        source_hits = row.get("intent_hits") or row.get("intent_hits_union") or []
+        parsed_hits: list[dict] = []
+        for item in source_hits:
+            if not item.get("article"):
+                continue
+            matched = item.get("matched_intents") or []
+            intent_ids = item.get("intent_ids") or [m.get("intent_id") for m in matched if m.get("intent_id")]
+            parsed_hits.append(
+                {
+                    "article": norm_text(item.get("article", "")),
+                    "doc": norm_text(item.get("doc", "")) or article_to_doc(norm_text(item.get("article", ""))),
+                    "intent_ids": intent_ids,
+                    "intent_rank": item.get("intent_rank") or item.get("best_intent_rank") or 10**9,
+                    "intent_rrf_score": float(
+                        item.get("intent_rrf_score")
+                        or item.get("best_intent_rrf_score")
+                        or item.get("rrf_score")
+                        or 0.0
+                    ),
+                }
+            )
+        hits_by_qid[qid] = parsed_hits
     return intents_by_qid, hits_by_qid
 
 
@@ -234,6 +245,7 @@ def main() -> None:
     parser.add_argument("--top-n-bge", type=int, default=3)
     parser.add_argument("--top-m-intent", type=int, default=3)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--strict-errors", action="store_true")
     args = parser.parse_args()
 
     questions = list(read_json(Path(args.input)))
@@ -252,6 +264,16 @@ def main() -> None:
         qid = q["id"]
         qid_key = str(qid)
         num_intents = len(intents_by_qid.get(qid, []))
+        if args.strict_errors:
+            if num_intents < 1:
+                raise ValueError(f"Q{qid} has no legal intents")
+            if len(rrf_by_qid.get(qid, [])) < args.top_b_rrf:
+                raise ValueError(f"Q{qid} has fewer than {args.top_b_rrf} global RRF articles")
+            for intent_index in range(num_intents):
+                if len(bge_by_qid.get(qid_key, {}).get(intent_index, [])) < args.top_n_bge:
+                    raise ValueError(f"Q{qid} intent {intent_index} has insufficient BGE results")
+                if len(ranked_hits_by_qid.get(qid, {}).get(intent_index, [])) < args.top_m_intent:
+                    raise ValueError(f"Q{qid} intent {intent_index} has insufficient raw intent results")
         entry, diag = build_entry(
             qid=qid,
             question=q["question"],

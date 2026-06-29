@@ -13,13 +13,104 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from intent_hits_clean_probe import WorkerContext, load_clean_bm25  # noqa: E402
+from retrieval.bm25_index import BM25Index  # noqa: E402
 from retrieval.config import load_config, validate_config  # noqa: E402
 from retrieval.hybrid_search import rrf_fusion  # noqa: E402
 
 
 log = logging.getLogger("intent_ranked_hits_clean")
 _THREAD_LOCAL = threading.local()
+
+
+def load_clean_bm25(index_path: Path, expected_count: int) -> BM25Index:
+    log.info("Loading clean BM25 from %s", index_path)
+    index = BM25Index.load(index_path)
+    if len(index) != expected_count:
+        raise ValueError(f"BM25 doc count mismatch: {len(index)} != {expected_count}")
+    return index
+
+
+class WorkerContext:
+    def __init__(self, config, bm25: BM25Index) -> None:
+        from qdrant_client import QdrantClient  # noqa: PLC0415
+
+        self.config = config
+        self.bm25 = bm25
+        if config.backend == "vertex_ai":
+            from vertex_backends import VertexEmbedder  # noqa: PLC0415
+
+            self.embedder = VertexEmbedder(config, dry_run=False)
+        elif config.backend == "gpu":
+            from gpu_backends import make_gpu_components  # noqa: PLC0415
+
+            self.embedder, _, _, _ = make_gpu_components(config, mock=False)
+        else:
+            raise ValueError(f"Unsupported backend: {config.backend}")
+
+        qdrant = config.qdrant
+        if qdrant.url:
+            self.qdrant = QdrantClient(
+                url=qdrant.url,
+                api_key=qdrant.api_key or None,
+                timeout=120,
+            )
+        else:
+            self.qdrant = QdrantClient(host=qdrant.host, port=qdrant.port, timeout=120)
+
+    def dense_search(self, vector, limit: int) -> tuple[list[tuple[str, float]], dict[str, dict]]:
+        response = self.qdrant.query_points(
+            collection_name=self.config.qdrant.collection,
+            query=vector.tolist() if hasattr(vector, "tolist") else list(vector),
+            limit=limit,
+            with_payload=True,
+        )
+        points = getattr(response, "points", response)
+        hits: list[tuple[str, float]] = []
+        payloads: dict[str, dict] = {}
+        for point in points:
+            payload = getattr(point, "payload", None)
+            if payload is None and isinstance(point, dict):
+                payload = point.get("payload")
+            payload = payload or {}
+            point_id = getattr(point, "id", None)
+            if point_id is None and isinstance(point, dict):
+                point_id = point.get("id")
+            chunk_id = payload.get("chunk_id") or str(point_id)
+            score = getattr(point, "score", None)
+            if score is None and isinstance(point, dict):
+                score = point.get("score", 0.0)
+            hits.append((chunk_id, float(score or 0.0)))
+            if payload:
+                payloads[chunk_id] = payload
+        return hits, payloads
+
+    def resolve_payloads(
+        self,
+        fused: list[tuple[str, float]],
+        dense_payloads: dict[str, dict],
+    ) -> list[dict]:
+        results: list[dict] = []
+        for chunk_id, score in fused:
+            payload = self.bm25.get_payload(chunk_id)
+            if payload is None:
+                qdrant_payload = dense_payloads.get(chunk_id) or {}
+                law_id = qdrant_payload.get("law_id", "")
+                law_type = qdrant_payload.get("law_type", "")
+                law_name = qdrant_payload.get("law_name", "")
+                article_number = qdrant_payload.get("dieu_number") or qdrant_payload.get("article_number", "")
+                payload = {
+                    "chunk_id": qdrant_payload.get("chunk_id", chunk_id),
+                    "law_id": law_id,
+                    "law_type": law_type,
+                    "law_name": law_name,
+                    "dieu_number": article_number,
+                    "dieu_title": qdrant_payload.get("dieu_title") or qdrant_payload.get("article_title", ""),
+                    "content": qdrant_payload.get("content", ""),
+                    "relevant_doc_str": qdrant_payload.get("relevant_doc_str") or f"{law_id}|{law_type} {law_name}",
+                    "relevant_article_str": qdrant_payload.get("relevant_article_str") or f"{law_id}|{law_type} {law_name}|{article_number}",
+                }
+            results.append({**payload, "rrf_score": score})
+        return results
 
 
 def append_jsonl(path: Path, record: dict, lock: threading.Lock) -> None:
@@ -164,7 +255,17 @@ def retrieve_ranked_hits_for_question(config, bm25, qid, question: str, intents:
     }
 
 
-def write_ordered_output(output_path: Path, questions: list[dict], records: dict) -> list[dict]:
+def write_ordered_output(
+    output_path: Path,
+    questions: list[dict],
+    records: dict,
+    *,
+    allow_missing: bool = True,
+) -> list[dict]:
+    if not allow_missing:
+        missing = [q["id"] for q in questions if q["id"] not in records]
+        if missing:
+            raise RuntimeError(f"{len(missing)} intent retrieval rows missing: {missing[:20]}")
     ordered = [
         records.get(
             q["id"],
@@ -208,11 +309,12 @@ def main() -> None:
     parser.add_argument("--intents-source", default="outputs/intent_hits_clean_results.json")
     parser.add_argument("--cache", default="outputs/intent_ranked_hits_clean_cache.jsonl")
     parser.add_argument("--output", default="outputs/intent_ranked_hits_clean_results.json")
-    parser.add_argument("--bm25-index", default="retrieval/data/bm25_index_clean_v1.pkl")
-    parser.add_argument("--expected-count", type=int, default=86492)
+    parser.add_argument("--bm25-index", default="retrieval/data/bm25_index_asof_20260301.pkl")
+    parser.add_argument("--expected-count", type=int, default=82570)
     parser.add_argument("--workers", type=int, default=20)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--strict-errors", action="store_true")
     args = parser.parse_args()
 
     questions = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -273,7 +375,15 @@ def main() -> None:
                     eta / 60,
                 )
 
-    ordered = write_ordered_output(Path(args.output), questions, records)
+    missing = [q["id"] for q in questions if q["id"] not in records]
+    if missing and args.strict_errors:
+        raise RuntimeError(f"{len(missing)} intent retrieval rows missing; resume required: {missing[:20]}")
+    ordered = write_ordered_output(
+        Path(args.output),
+        questions,
+        records,
+        allow_missing=not args.strict_errors,
+    )
     sizes = [len(r.get("intent_hits_union", [])) for r in ordered]
     raw_sizes = [
         sum(len(x.get("ranked_articles", [])) for x in r.get("intent_ranked_hits", []))

@@ -24,7 +24,6 @@ from article_lookup import ArticleLookup  # noqa: E402
 from backends_common import retry_transient, strip_code_fences  # noqa: E402
 from retrieval.config import load_config, validate_config  # noqa: E402
 from submit import save_submission  # noqa: E402
-from vertex_backends import make_genai_client  # noqa: E402
 
 
 log = logging.getLogger("llm_candidate_verifier")
@@ -204,10 +203,15 @@ def parse_verifier_json(raw: str, allowed_ids: set[str]) -> tuple[dict | None, b
         return None, False
     if not isinstance(data, dict):
         return None, False
-    selected = data.get("selected_article_ids", [])
+    if "selected_article_ids" not in data:
+        return None, False
+    selected = data["selected_article_ids"]
     if not isinstance(selected, list):
-        selected = []
-    selected = [str(x) for x in selected if str(x) in allowed_ids]
+        return None, False
+    normalized_ids = [str(x).strip() for x in selected]
+    if any(article_id not in allowed_ids for article_id in normalized_ids):
+        return None, False
+    selected = normalized_ids
     confidence = str(data.get("confidence", "low")).lower().strip()
     if confidence not in {"high", "medium", "low"}:
         confidence = "low"
@@ -235,19 +239,25 @@ def parse_stage1_alias_json(raw: str, key_to_id: dict[str, str]) -> tuple[dict |
         data = {"selected_article_keys": keys, "confidence": "low"}
     if not isinstance(data, dict):
         return None, False
-    keys = data.get("selected_article_keys", data.get("selected_article_ids", []))
+    if "selected_article_keys" in data:
+        keys = data["selected_article_keys"]
+    elif "selected_article_ids" in data:
+        keys = data["selected_article_ids"]
+    else:
+        return None, False
     if not isinstance(keys, list):
-        keys = []
+        return None, False
+    normalized_keys = [str(key).strip() for key in keys]
+    if any(key not in key_to_id for key in normalized_keys):
+        return None, False
     selected: list[str] = []
-    for key in keys:
-        article_id = key_to_id.get(str(key).strip())
-        if article_id:
-            selected.append(article_id)
+    for key in normalized_keys:
+        selected.append(key_to_id[key])
     confidence = str(data.get("confidence", "low")).lower().strip()
     if confidence not in {"high", "medium", "low"}:
         confidence = "low"
     return {
-        "selected_article_keys": [str(key) for key in keys],
+        "selected_article_keys": normalized_keys,
         "selected_article_ids": dedupe_keep_order(selected),
         "confidence": confidence,
     }, True
@@ -276,7 +286,14 @@ def apply_fallback(
 class VerifierWorker:
     def __init__(self, config) -> None:
         self.config = config
-        self.client = make_genai_client(config)
+        self.backend = config.backend
+        self.client = None
+        if self.backend == "vertex_ai":
+            from vertex_backends import make_genai_client  # noqa: PLC0415
+
+            self.client = make_genai_client(config)
+        elif self.backend != "gpu":
+            raise ValueError(f"Unsupported verifier backend: {self.backend}")
 
     def call(
         self,
@@ -286,9 +303,21 @@ class VerifierWorker:
         system_prompt: str,
         legal_intents: list[str] | None = None,
     ) -> str:
+        user_prompt = build_user_prompt(question, candidate_articles, legal_intents=legal_intents)
+        if self.backend == "gpu":
+            from gpu_backends import gpu_chat_complete  # noqa: PLC0415
+
+            return gpu_chat_complete(
+                self.config,
+                system=system_prompt,
+                user=user_prompt,
+                temperature=0.0,
+                max_tokens=2048,
+            )
+
         from google.genai import types  # noqa: PLC0415
 
-        user_prompt = build_user_prompt(question, candidate_articles, legal_intents=legal_intents)
+        assert self.client is not None
         return retry_transient(
             lambda: getattr(
                 self.client.models.generate_content(
@@ -314,9 +343,15 @@ _THREAD_LOCAL = threading.local()
 
 def get_worker(config) -> VerifierWorker:
     worker = getattr(_THREAD_LOCAL, "worker", None)
-    if worker is None:
+    worker_key = (
+        config.backend,
+        config.vllm.model if config.backend == "vertex_ai" else config.gpu.llm_model,
+        config.gpu.llm_endpoint_id if config.backend == "gpu" else config.vllm.gcp_project,
+    )
+    if worker is None or getattr(_THREAD_LOCAL, "worker_key", None) != worker_key:
         worker = VerifierWorker(config)
         _THREAD_LOCAL.worker = worker
+        _THREAD_LOCAL.worker_key = worker_key
     return worker
 
 
@@ -350,6 +385,18 @@ def append_jsonl(path: Path, record: dict, lock: threading.Lock) -> None:
 def acquire_cache_run_lock(cache_path: Path) -> Path:
     lock_path = cache_path.with_suffix(cache_path.suffix + ".running")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    if lock_path.exists():
+        try:
+            text = lock_path.read_text(encoding="utf-8")
+            pid_line = next((line for line in text.splitlines() if line.startswith("pid=")), "")
+            pid = int(pid_line.partition("=")[2])
+            os.kill(pid, 0)
+        except (OSError, ValueError, StopIteration):
+            lock_path.unlink(missing_ok=True)
+        else:
+            raise RuntimeError(
+                f"Cache lock already exists and PID {pid} is active: {lock_path}"
+            )
     try:
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError as exc:
@@ -478,6 +525,8 @@ def stage2_minimal_select(
         lookup,
         content_max_chars=STAGE2_CONTENT_MAX_CHARS,
     )
+    if strict_errors and missing:
+        raise RuntimeError(f"stage2 missing {len(missing)} hydrated articles")
     hydrated_order = [c["article_id"] for c in stage2_candidates]
     if not stage2_candidates:
         return stage1_article_ids, {
@@ -538,6 +587,10 @@ def stage2_minimal_select(
             )
             if final_missing:
                 missing.extend(final_missing)
+                if strict_errors:
+                    raise RuntimeError(
+                        f"stage2 global round missing {len(final_missing)} hydrated articles"
+                    )
             result = run_stage2_call(
                 config,
                 question,
@@ -626,6 +679,8 @@ def verify_one(
         lookup,
         content_max_chars=STAGE1_CONTENT_MAX_CHARS,
     )
+    if strict_errors and missing:
+        raise RuntimeError(f"stage1 missing {len(missing)} hydrated articles for question {qid}")
     allowed_ids = {c["article_id"] for c in candidate_articles}
     hydrated_order = [a for a in original_order if a in allowed_ids]
 
@@ -858,7 +913,7 @@ def main() -> None:
         default=None,
         help="Read stage-1 verifier diagnostics and run only stage 2 on final_article_ids.",
     )
-    parser.add_argument("--corpus", default="corpus/data/corpus_clean.json")
+    parser.add_argument("--corpus", default="corpus/data/corpus_clean_asof_20260301.json")
     parser.add_argument("--intent-results", default="outputs/intent_ranked_hits_clean_results.json")
     parser.add_argument("--cache", default="cache/llm_stage2_adaptive_min2_rescue1_c1600_prompt_v2.jsonl")
     parser.add_argument("--output-dir", default="outputs/submission_stage2_adaptive_min2_rescue1_c1600_prompt_v2")

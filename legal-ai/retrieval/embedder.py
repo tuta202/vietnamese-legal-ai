@@ -9,7 +9,9 @@ Model is loaded on first call to embed_query() / embed_corpus().
 """
 from __future__ import annotations
 
+import hashlib
 import logging
+import unicodedata
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,6 +33,24 @@ _BATCH_SIZE = 32    # default; overridden by config.embedding.batch_size
 _LAW_NAME_MAXCHARS = 220
 _TITLE_MAXCHARS = 180
 _DOC_CONTENT_MAXCHARS = 1000
+
+
+def format_document_text(article: dict) -> str:
+    """Canonical text embedded for one corpus article."""
+    law_name = str(article.get("law_name", ""))[:_LAW_NAME_MAXCHARS]
+    title = str(article.get("dieu_title", ""))[:_TITLE_MAXCHARS]
+    content = str(article.get("content", ""))[:_DOC_CONTENT_MAXCHARS]
+    return (
+        f"{article.get('law_type', '')} {law_name}\n"
+        f"{article.get('dieu_number', '')}. {title}\n"
+        f"{content}"
+    )
+
+
+def embedding_text_sha256(article: dict) -> str:
+    """Fingerprint the exact normalized document text sent to an embedder."""
+    text = unicodedata.normalize("NFC", format_document_text(article))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class LegalEmbedder:
@@ -69,14 +89,7 @@ class LegalEmbedder:
         return f"Instruct: {_EMBED_INSTRUCTION}\nQuery: {text}"
 
     def _format_document(self, article: dict) -> str:
-        law_name = str(article.get("law_name", ""))[:_LAW_NAME_MAXCHARS]
-        title = str(article.get("dieu_title", ""))[:_TITLE_MAXCHARS]
-        content = str(article.get("content", ""))[:_DOC_CONTENT_MAXCHARS]
-        return (
-            f"{article.get('law_type', '')} {law_name}\n"
-            f"{article.get('dieu_number', '')}. {title}\n"
-            f"{content}"
-        )
+        return format_document_text(article)
 
     # ------------------------------------------------------------------
     # Embedding
@@ -91,13 +104,14 @@ class LegalEmbedder:
         """Embed a single query string. Returns (dim,) float32 array."""
         if self.dry_run:
             return np.zeros(self.dim, dtype=np.float32)
-        return self._encode_query(text)
+        return self._encode_query(unicodedata.normalize("NFC", text))
 
     def embed_documents(self, texts: list[str]) -> np.ndarray:
         """Embed a batch of pre-formatted document texts."""
         if self.dry_run:
             return np.zeros((len(texts), self.dim), dtype=np.float32)
-        return self._encode_documents(texts)
+        normalized = [unicodedata.normalize("NFC", text) for text in texts]
+        return self._encode_documents(normalized)
 
     # ------------------------------------------------------------------
     # Encoding hooks — overridden by Vertex subclass (only these differ)

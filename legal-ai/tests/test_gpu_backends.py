@@ -20,6 +20,8 @@ from gpu_backends import (
     GpuReranker,
     make_gpu_components,
 )
+from llm_candidate_verifier import VerifierWorker
+from intent_ranked_hits_clean import WorkerContext
 from retrieval.config import (
     EmbeddingConfig,
     RetrievalConfig,
@@ -27,7 +29,7 @@ from retrieval.config import (
     validate_config,
 )
 
-_CONFIG_GPU = Path(__file__).resolve().parent.parent / "config_gpu.yaml"
+_CONFIG_GPU = Path(__file__).resolve().parent.parent / "config_gpu_clean.yaml"
 
 
 @pytest.fixture
@@ -125,6 +127,65 @@ class TestConfigFileLoads:
         assert cfg.gpu.region == "asia-southeast1"
         assert cfg.embedding.dimension == 4096
         assert cfg.qdrant.vector_size == 4096
-        assert cfg.qdrant.collection == "legal_vn_garden"
+        assert cfg.qdrant.collection == "legal_vn_qwen3_asof_20260301_v1"
         assert cfg.retrieval.top_k_rerank == 6
-        assert cfg.retrieval.top_k_fusion == 50
+        assert cfg.retrieval.top_k_fusion == 200
+
+    def test_clean_gpu_config_uses_qwen_collection(self):
+        cfg = load_config(_CONFIG_GPU)
+        assert cfg.backend == "gpu"
+        assert cfg.models.embedder == "Qwen3-Embedding-8B"
+        assert cfg.models.reranker == "BAAI/bge-reranker-v2-m3"
+        assert cfg.embedding.dimension == 4096
+        assert cfg.qdrant.vector_size == 4096
+        assert cfg.qdrant.collection == "legal_vn_qwen3_asof_20260301_v1"
+
+
+class TestGpuVerifier:
+    def test_verifier_uses_gemma_adapter(self, gpu_cfg, monkeypatch):
+        calls = []
+
+        def fake_chat(config, *, system, user, temperature, max_tokens):
+            calls.append(
+                {
+                    "config": config,
+                    "system": system,
+                    "user": user,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+            )
+            return '{"selected_article_keys":["A1"],"confidence":"high"}'
+
+        monkeypatch.setattr("gpu_backends.gpu_chat_complete", fake_chat)
+        worker = VerifierWorker(gpu_cfg)
+        raw = worker.call(
+            "question",
+            [{"key": "A1", "content": "article"}],
+            system_prompt="system",
+            legal_intents=["intent"],
+        )
+
+        assert "A1" in raw
+        assert len(calls) == 1
+        assert calls[0]["config"] is gpu_cfg
+        assert '"legal_intents"' in calls[0]["user"]
+        assert calls[0]["temperature"] == 0.0
+        assert calls[0]["max_tokens"] == 2048
+
+
+class TestGpuIntentRetrievalRouting:
+    def test_worker_context_uses_gpu_embedder(self, gpu_cfg, monkeypatch):
+        marker = object()
+
+        monkeypatch.setattr(
+            "gpu_backends.make_gpu_components",
+            lambda config, mock: (marker, object(), object(), object()),
+        )
+        monkeypatch.setattr(
+            "qdrant_client.QdrantClient",
+            lambda *args, **kwargs: object(),
+        )
+
+        context = WorkerContext(gpu_cfg, bm25=object())
+        assert context.embedder is marker

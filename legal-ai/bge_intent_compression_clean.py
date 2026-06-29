@@ -24,7 +24,7 @@ from submit import save_submission  # noqa: E402
 log = logging.getLogger("bge_intent_compression_clean")
 
 DEFAULT_CACHE = "cache/bge_intent_compression_clean.jsonl"
-DEFAULT_CORPUS = "corpus/data/corpus_clean.json"
+DEFAULT_CORPUS = "corpus/data/corpus_clean_asof_20260301.json"
 DEFAULT_KEEP_SUBMISSION = "outputs/submission_rrf_top60_union_intent_hits_clean/results.json"
 DEFAULT_INTENT_RESULTS = "outputs/intent_hits_clean_results.json"
 DEFAULT_RRF60_SUBMISSION = "outputs/submission_rrf_top60_clean/results.json"
@@ -89,7 +89,8 @@ def load_intent_results(path: Path) -> tuple[dict[object, list[str]], dict[objec
         qid = row["id"]
         intents_by_qid[qid] = [str(x).strip() for x in row.get("legal_intents", []) if str(x).strip()]
         hits: list[str] = []
-        for item in row.get("intent_hits", []):
+        source_hits = row.get("intent_hits") or row.get("intent_hits_union") or []
+        for item in source_hits:
             article = norm_text(item.get("article", ""))
             if article:
                 hits.append(article)
@@ -176,7 +177,16 @@ def rank_one_intent(
         valid_articles.append(article)
         docs.append(doc_text(meta))
 
+    if missing:
+        raise ValueError(
+            f"Q{qid} intent {intent_index}: {len(missing)} keep articles missing from corpus"
+        )
+
     scores = bge.score_pairs(intent, docs)
+    if len(scores) != len(valid_articles):
+        raise ValueError(
+            f"Q{qid} intent {intent_index}: score count {len(scores)} != documents {len(valid_articles)}"
+        )
     ranked = sorted(
         [
             {
@@ -282,6 +292,18 @@ def run_mode(args: argparse.Namespace) -> None:
                 eta = (len(jobs) - done) / rate if rate else 0
                 log.info("%d/%d intent jobs done (%.2f jobs/s, ETA %.1f min)", done, len(jobs), rate, eta / 60)
 
+    completed_cache = load_cache(cache_path)
+    expected_keys = {
+        (str(q["id"]), idx)
+        for q in questions
+        for idx, _ in enumerate(intents_by_qid.get(q["id"], []))
+        if build_keep(q["id"], rrf60_by_qid, intent_hits_by_qid)
+    }
+    missing_keys = sorted(expected_keys - set(completed_cache))
+    if missing_keys and args.strict_errors:
+        raise RuntimeError(
+            f"{len(missing_keys)} BGE intent jobs missing; resume required: {missing_keys[:20]}"
+        )
     log.info("Done. Cache written to %s", cache_path)
 
 
@@ -597,6 +619,7 @@ def main() -> None:
     parser.add_argument("--workers", type=int, default=20)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--strict-errors", action="store_true")
     parser.add_argument("--dry-bge", action="store_true")
     parser.add_argument("--checkpoint-every", type=int, default=25)
     parser.add_argument("--top-each-intent", default="3,5")
