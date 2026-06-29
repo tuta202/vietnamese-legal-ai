@@ -1,7 +1,7 @@
 """Tests for config validation and ${ENV_VAR} secret expansion."""
 from __future__ import annotations
 
-from retrieval.config import (
+from legal_rag.retrieval.config import (
     RetrievalConfig,
     _expand_env,
     load_config,

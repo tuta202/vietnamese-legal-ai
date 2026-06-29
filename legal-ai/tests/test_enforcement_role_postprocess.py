@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enforcement_role_postprocess import drop_reason
+from legal_rag.verification.enforcement_gate import drop_reason
 
 
 def article(law_name: str, title: str) -> dict[str, str]:

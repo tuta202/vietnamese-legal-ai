@@ -13,16 +13,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from gpu_backends import (
+from legal_rag.backends.gpu import (
     GpuEmbedder,
     GpuGenerator,
     GpuQueryRewriter,
     GpuReranker,
     make_gpu_components,
 )
-from llm_candidate_verifier import VerifierWorker
-from intent_ranked_hits_clean import WorkerContext
-from retrieval.config import (
+from legal_rag.verification.candidate_verifier import VerifierWorker
+from legal_rag.retrieval.intent_rrf import WorkerContext
+from legal_rag.retrieval.config import (
     EmbeddingConfig,
     RetrievalConfig,
     load_config,
@@ -157,7 +157,7 @@ class TestGpuVerifier:
             )
             return '{"selected_article_keys":["A1"],"confidence":"high"}'
 
-        monkeypatch.setattr("gpu_backends.gpu_chat_complete", fake_chat)
+        monkeypatch.setattr("legal_rag.backends.gpu.gpu_chat_complete", fake_chat)
         worker = VerifierWorker(gpu_cfg)
         raw = worker.call(
             "question",
@@ -179,7 +179,7 @@ class TestGpuIntentRetrievalRouting:
         marker = object()
 
         monkeypatch.setattr(
-            "gpu_backends.make_gpu_components",
+            "legal_rag.backends.gpu.make_gpu_components",
             lambda config, mock: (marker, object(), object(), object()),
         )
         monkeypatch.setattr(

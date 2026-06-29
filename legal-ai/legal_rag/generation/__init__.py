@@ -1,0 +1,1 @@
+"""Legal answer generation components."""

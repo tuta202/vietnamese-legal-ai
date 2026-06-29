@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from pipeline import LegalAIPipeline
+from legal_rag.pipeline import LegalAIPipeline
 
 
 @pytest.fixture

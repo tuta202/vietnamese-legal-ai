@@ -5,8 +5,8 @@ import unicodedata
 import numpy as np
 import pytest
 
-from retrieval.bm25_index import BM25Index, vietnamese_simple_tokenize
-from setup_qdrant_cloud import _validate_vectors
+from legal_rag.retrieval.bm25_index import BM25Index, vietnamese_simple_tokenize
+from legal_rag.indexing.build_qdrant import _validate_vectors
 
 
 def test_tokenizer_normalizes_canonically_equivalent_vietnamese() -> None:

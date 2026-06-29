@@ -1,17 +1,17 @@
-import llm_candidate_verifier
+from legal_rag.verification import candidate_verifier as llm_candidate_verifier
 import pytest
-from llm_best_collective_filter import (
+from legal_rag.verification.final_collective import (
     alias_candidates as alias_collective_candidates,
     process_question as process_collective_question,
 )
-from llm_candidate_verifier import (
+from legal_rag.verification.candidate_verifier import (
     alias_candidates,
     parse_stage1_alias_json,
     run_stage2_call,
     stage2_minimal_select,
     verify_one,
 )
-from retrieval.embedder import embedding_text_sha256, format_document_text
+from legal_rag.retrieval.embedder import embedding_text_sha256, format_document_text
 
 
 def candidate():

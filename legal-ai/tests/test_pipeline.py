@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 # conftest.py ensures legal-ai/ is in sys.path
-from pipeline import LegalAIPipeline, PipelineState
-from submit import save_submission, validate_submission
+from legal_rag.pipeline import LegalAIPipeline, PipelineState
+from legal_rag.output.submission import save_submission, validate_submission
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _SAMPLE_QS = _TESTS_DIR / "sample_questions.json"

@@ -1,5 +1,9 @@
 # Best RAG Workflow
 
+Vị trí module và trách nhiệm từng thư mục được mô tả tại
+[`source-layout.md`](source-layout.md). Các command ở root vẫn tương thích; orchestrator
+gọi stage nội bộ qua `python -m legal_rag.<stage>`.
+
 Tài liệu này mô tả workflow tốt nhất hiện tại để tạo submission điều luật. Các số liệu
 leaderboard bên dưới là kết quả đã đo, không phải metric local.
 

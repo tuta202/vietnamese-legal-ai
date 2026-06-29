@@ -9,8 +9,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from retrieval.config import EmbeddingConfig, RetrievalConfig
-from vertex_backends import (
+from legal_rag.retrieval.config import EmbeddingConfig, RetrievalConfig
+from legal_rag.backends.vertex import (
     VertexEmbedder,
     VertexGenerator,
     VertexQueryRewriter,

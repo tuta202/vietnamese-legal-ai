@@ -34,7 +34,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 _ROOT = _HERE.parent
 sys.path.insert(0, str(_ROOT))
-from retrieval.bm25_index import BM25Index  # noqa: E402
+from legal_rag.retrieval.bm25_index import BM25Index  # noqa: E402
 
 _PCTL = 10          # flag questions below this percentile of top-1 scores
 _DUMP_N = 30        # dump N lowest-scoring questions
