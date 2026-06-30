@@ -394,11 +394,12 @@ def main() -> None:
     collections = client.get_collections().collections
     print(f"  OK connected - {len(collections)} existing collection(s)")
 
-    print("\n[4/7] Testing LLM query rewrite")
-    rewritten = rewriter.rewrite_strict("Nguoi lao dong duoc nghi bao nhieu ngay phep nam?")
-    if not rewritten.get("rewritten_query") or not rewritten.get("topic_description"):
-        raise RuntimeError("query rewrite preflight returned incomplete output")
-    print(f"  OK rewritten_query: {rewritten['rewritten_query'][:80]}")
+    if args.test_only:
+        print("\n[4/7] Testing LLM query rewrite")
+        rewritten = rewriter.rewrite_strict("Nguoi lao dong duoc nghi bao nhieu ngay phep nam?")
+        if not rewritten.get("rewritten_query") or not rewritten.get("topic_description"):
+            raise RuntimeError("query rewrite preflight returned incomplete output")
+        print(f"  OK rewritten_query: {rewritten['rewritten_query'][:80]}")
 
     if args.test_only:
         print("\n[5/7] --test-only set; skipping corpus indexing")

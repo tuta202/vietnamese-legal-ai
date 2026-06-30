@@ -97,7 +97,9 @@ class GeneratorConfig:
     temperature: float = 0.3
     max_tokens: int = 3000
     top_p: float = 0.9
-    max_articles: int = 7   # max context articles passed to the LLM
+    max_articles: int = 0   # 0 = pass every article selected by the verifier
+    content_max_chars: int = 2400
+    total_content_max_chars: int = 48000
 
 
 @dataclass

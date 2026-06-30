@@ -86,14 +86,24 @@ class TestPromptBuilder:
         result = pb.build_prompt("Câu hỏi mẫu?", sample_articles)
         system = result["system"]
         assert "trích dẫn" in system.lower() or "Điều" in system
-        assert "tư vấn sơ bộ" in system.lower() or "lưu ý" in system.lower()
+        assert "exact legal basis" in system.lower()
 
     def test_system_prompt_contains_no_hallucinate_instruction(self, sample_articles):
         pb = PromptBuilder()
         result = pb.build_prompt("test", sample_articles)
         system = result["system"].lower()
-        # Must instruct not to fabricate
-        assert "không" in system and ("bịa" in system or "không có" in system)
+        assert "do not invent" in system
+        assert "use only the supplied articles" in system
+
+    def test_system_prompt_prevents_cross_clause_consequence_transfer(self, sample_articles):
+        system = PromptBuilder().build_prompt("test", sample_articles)["system"].lower()
+
+        assert "separate rule" in system
+        assert "same khoản/điểm" in system
+        assert "neighboring khoản/điểm" in system
+        assert "interest payment" in system
+        assert "never turn \"khoản 2\" into \"điều 2\"" in system
+        assert "keep penalty amounts and remedies separate" in system
 
     def test_user_prompt_contains_all_articles(self, sample_articles):
         pb = PromptBuilder()
@@ -113,11 +123,11 @@ class TestPromptBuilder:
         pb = PromptBuilder()
         result = pb.build_prompt("q", sample_articles)
         user = result["user"]
-        # Each article block starts with "---"
-        assert user.count("---") >= len(sample_articles)
-        # Each block has [law_type law_id] header
-        for art in sample_articles:
-            assert f"[{art['law_type']} {art['law_id']}]" in user
+        assert user.count("\nSource:") == len(sample_articles)
+        for index, art in enumerate(sample_articles, start=1):
+            assert f"[A{index}]" in user
+            assert art["law_id"] in user
+            assert art["law_name"] in user
 
     def test_prompt_builder_max_articles(self, sample_articles):
         """With 10 articles and max_articles=7, only 7 should appear."""
@@ -125,10 +135,11 @@ class TestPromptBuilder:
         pb = PromptBuilder()
         result = pb.build_prompt("q", arts_10, max_articles=7)
         user = result["user"]
-        # Count "---" separators; should be exactly 7
-        assert user.count("---") == 7
+        assert user.count("\nSource:") == 7
+        assert "[A7]" in user
+        assert "[A8]" not in user
 
-    def test_content_truncated_at_600_chars(self, default_config):
+    def test_content_truncated_with_head_and_tail(self, default_config):
         pb = PromptBuilder()
         long_art = {
             "chunk_id": "x" * 32,
@@ -137,13 +148,48 @@ class TestPromptBuilder:
             "law_name": "Test",
             "dieu_number": "Điều 1",
             "dieu_title": "Title",
-            "content": "X" * 1000,
+            "content": "HEAD" + "X" * 3000 + "TAIL",
         }
         result = pb.build_prompt("q", [long_art])
         user = result["user"]
-        # Content truncated to 600 chars + "..." → at most 603 X's in a row
-        assert "X" * 601 not in user
-        assert "..." in user   # truncation marker present
+        assert "HEAD" in user
+        assert "TAIL" in user
+        assert "phần giữa được rút gọn" in user
+
+    def test_default_includes_all_articles(self, sample_articles):
+        articles = []
+        for index in range(12):
+            article = dict(sample_articles[index % len(sample_articles)])
+            article["dieu_title"] = f"Unique title {index}"
+            articles.append(article)
+
+        user = PromptBuilder().build_prompt("q", articles)["user"]
+
+        assert user.count("\nSource:") == 12
+        assert "Unique title 11" in user
+
+    def test_total_content_budget_is_shared_across_all_articles(self):
+        articles = [
+            {
+                "law_id": str(index),
+                "law_type": "Luật",
+                "law_name": "Test",
+                "dieu_number": f"Điều {index}",
+                "dieu_title": f"Title {index}",
+                "content": f"HEAD-{index}-" + "X" * 500 + f"-TAIL-{index}",
+            }
+            for index in range(4)
+        ]
+
+        user = PromptBuilder().build_prompt(
+            "q",
+            articles,
+            content_max_chars=500,
+            total_content_max_chars=400,
+        )["user"]
+
+        for index in range(4):
+            assert f"[A{index + 1}]" in user
 
 
 # ---------------------------------------------------------------------------
@@ -210,8 +256,8 @@ class TestGeneratorMock:
     def test_mock_contains_disclaimer(self, default_config, sample_articles):
         gen = LegalGenerator(default_config, mock=True)
         answer = gen.generate("Câu hỏi?", sample_articles)
-        assert "tư vấn sơ bộ" in answer.lower()
-        assert "luật sư" in answer.lower() or "thẩm quyền" in answer.lower()
+        assert "lưu ý" in answer.lower()
+        assert "chuyên gia pháp lý" in answer.lower() or "thẩm quyền" in answer.lower()
 
     def test_mock_cites_first_article_dieu(self, default_config, sample_articles):
         gen = LegalGenerator(default_config, mock=True)
@@ -222,7 +268,7 @@ class TestGeneratorMock:
     def test_mock_empty_articles(self, default_config):
         gen = LegalGenerator(default_config, mock=True)
         answer = gen.generate("Câu hỏi?", [])
-        assert "tư vấn sơ bộ" in answer.lower()
+        assert "lưu ý" in answer.lower()
 
     def test_mock_no_client_init(self, default_config, sample_articles):
         gen = LegalGenerator(default_config, mock=True)
@@ -238,9 +284,11 @@ class TestGeneratorConfig:
         if not cfg_path.exists():
             pytest.skip("config_gpu_clean.yaml not found")
         cfg = load_config(cfg_path)
-        assert cfg.generator.temperature == 0.1
+        assert cfg.generator.temperature == 0.0
         assert cfg.generator.max_tokens == 3000
-        assert cfg.generator.max_articles == 6
+        assert cfg.generator.max_articles == 0
+        assert cfg.generator.content_max_chars == 2400
+        assert cfg.generator.total_content_max_chars == 48000
 
     def test_default_generator_config(self):
         cfg = RetrievalConfig()

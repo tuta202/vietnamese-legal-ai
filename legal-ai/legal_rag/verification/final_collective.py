@@ -26,6 +26,7 @@ from legal_rag.verification.candidate_verifier import (  # noqa: E402
     load_legal_intents,
     order_by_reference,
     prepare_cache_for_run,
+    repair_stage1_alias_json,
     validate_config,
 )
 from legal_rag.output.submission import save_submission  # noqa: E402
@@ -34,64 +35,33 @@ from legal_rag.output.submission import save_submission  # noqa: E402
 log = logging.getLogger("legal_rag.verification.final_collective")
 
 SYSTEM_PROMPT = """\
-You select the necessary Vietnamese legal articles for one legal question.
+You are the final precision selector of Vietnamese legal evidence.
 
-Use only:
-- question
-- legal_intents
-- candidate_articles
+Select the smallest sufficient set of articles needed to answer the question and its legal_intents. Apply these checks to every selected article:
+1. Subject: it regulates the same person, organization, transaction, or situation asked about.
+2. Subtask: it answers the requested issue, such as eligibility, benefit, procedure, deadline, authority, violation, sanction, remedy, or required information.
+3. Contribution: it supplies a concrete rule that must appear in, justify, qualify, or change the final answer and is not already covered more directly by another selected article.
 
-Keep articles that are needed for the final legal answer:
-- direct answer articles
-- definitions that are required to understand the answer
-- obligation/conduct articles when the question asks about penalty, violation, coercion, or consequence
-- exception/condition articles when the question asks about a special case
-- one article for each independent legal intent
-- both a general law article and a detailed decree/circular article when they add different legal details
-- an article whose title directly names the requested issue, unless another selected article fully covers the same issue more specifically
+Drop an article if any check fails. Sharing a law, topic, or keyword is not enough. A rule for cooperatives does not answer a question about business incubators. A support type does not answer a question asking only for eligibility conditions. A general accounting duty does not answer a question asking for specific information to present.
 
-Remove articles that are only:
-- same broad topic but wrong subtask
-- another dossier/procedure/benefit/fund/program
-- general scope, responsibility, implementation, or effective-date background
-- clearly redundant because another selected article covers the same legal point and this article adds no legal detail
+Keep complementary articles for different intents or distinct necessary rules. Do not drop the only article supporting an independent intent. Drop scope, purpose, principle, administration, implementation, transition, responsibility, penalty, sanction, or coercion articles unless that exact issue is asked or their concrete rule is necessary.
 
-If unsure, keep the article.
-Return valid JSON only:
+When articles overlap, keep the most direct and complete one. Do not choose between old and new versions from document numbers alone; use only the displayed text and metadata. Do not use outside knowledge.
+
+Return exactly one JSON object using only candidate keys. No markdown or explanation:
 {
   "selected_article_keys": [],
   "confidence": "high|medium|low"
 }
 """
 
-STAGE2_RECALL_PROMPT = """\
-You filter Vietnamese legal articles for a recall-safe second stage.
-
-Use only:
-- question
-- legal_intents
-- candidate_articles
-
-Keep an article if it may be needed to answer the question or any legal intent:
-- direct rule, definition, condition, exception, procedure, deadline, authority
-- right, obligation, violation, penalty, legal consequence, required dossier/evidence
-- one useful article for each independent legal intent
-- both general law and detailed decree/circular if they add different legal details
-
-Remove only articles that are clearly unrelated, wrong subtask, or fully duplicated by another kept article.
-If unsure, keep the article.
-
-Return valid JSON only:
-{
-  "selected_article_keys": [],
-  "confidence": "high|medium|low"
-}
-"""
-
-PROMPTS = {
-    "final_precision": SYSTEM_PROMPT,
-    "stage2_recall": STAGE2_RECALL_PROMPT,
-}
+BATCH_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
+    "You are the final precision selector of Vietnamese legal evidence.",
+    "You are preparing a recall-safe shortlist for the final precision selector. Evaluate only the candidates shown in this batch.",
+).replace(
+    "Select the smallest sufficient set of articles needed to answer the question and its legal_intents.",
+    "Keep every article in this batch that may be necessary to answer the question or one legal_intent; remove merely topical or redundant articles.",
+)
 
 
 def read_json(path: Path) -> Any:
@@ -226,6 +196,8 @@ def call_collective(
     parsed = None
     parse_ok = False
     error = ""
+    repair_attempted = False
+    repaired_response = ""
     try:
         raw = get_worker(config).call(
             question,
@@ -234,6 +206,13 @@ def call_collective(
             legal_intents=legal_intents,
         )
         parsed, parse_ok = parse_collective_json(raw, key_to_id)
+        if not parse_ok and raw.strip():
+            repair_attempted = True
+            parsed, parse_ok, repaired_response = repair_stage1_alias_json(
+                config,
+                raw,
+                key_to_id,
+            )
     except Exception as exc:  # noqa: BLE001
         error = f"{type(exc).__name__}: {exc}"
     return {
@@ -244,6 +223,8 @@ def call_collective(
         "confidence": parsed.get("confidence", "low") if parsed else "low",
         "parse_ok": parse_ok,
         "raw_response": raw[:2000],
+        "repair_attempted": repair_attempted,
+        "repaired_response": repaired_response[:2000],
         "error": error,
     }
 
@@ -340,7 +321,7 @@ def process_question(
                 question,
                 batch,
                 legal_intents,
-                system_prompt=system_prompt,
+                system_prompt=BATCH_SYSTEM_PROMPT,
                 compact_candidates=compact_candidates,
             )
             result["round"] = "batch"
@@ -386,13 +367,9 @@ def process_question(
     if not selected:
         if strict_errors and any((not r.get("parse_ok")) or r.get("error") for r in rounds):
             raise RuntimeError(f"collective call failed for question {qid}")
-        selected = original[:2]
+        selected = original[:1]
         fallback_used = True
-        fallback_reason = "empty_or_failed_rescue_top2"
-    elif len(selected) == 1:
-        selected = dedupe_keep_order(selected + original[:1])
-        fallback_used = True
-        fallback_reason = "single_selection_rescue_top1"
+        fallback_reason = "valid_empty_selection_rescue_top1"
     elif has_error:
         if strict_errors:
             raise RuntimeError(f"collective partial parse/error for question {qid}")
@@ -446,27 +423,22 @@ def main() -> None:
     parser.add_argument("--input-diagnostics", default="outputs/submission_drop_penalty_when_not_needed/diagnostics.json")
     parser.add_argument("--intent-results", default="outputs/intent_ranked_hits_clean_results.json")
     parser.add_argument("--corpus", default="corpus/data/corpus_clean_asof_20260301.json")
-    parser.add_argument("--cache", default="cache/llm_best_collective_filter_c2200.jsonl")
-    parser.add_argument("--output-dir", default="outputs/submission_best_collective_filter_c2200")
-    parser.add_argument("--diagnostics", default="outputs/diagnostics_best_collective_filter_c2200.json")
+    parser.add_argument("--cache", default="cache/final_collective_gemma_v5.jsonl")
+    parser.add_argument("--output-dir", default="outputs/submission_final_collective_gemma_v5")
+    parser.add_argument("--diagnostics", default="outputs/diagnostics_final_collective_gemma_v5.json")
     parser.add_argument("--content-max-chars", type=int, default=2200)
     parser.add_argument("--batch-size", type=int, default=6)
     parser.add_argument("--direct-max", type=int, default=8)
-    parser.add_argument("--min-size", type=int, default=3)
+    parser.add_argument("--min-size", type=int, default=2)
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--limit", type=int, default=None)
-    parser.add_argument(
-        "--prompt-mode",
-        choices=sorted(PROMPTS),
-        default="final_precision",
-        help="Use final_precision for the proven final filter, or stage2_recall for recall-safe Stage 2.",
-    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preserve-top1", action="store_true")
     parser.add_argument(
         "--compact-candidates",
-        action="store_true",
-        help="Use compact A1/A2 key/source/article/content candidate objects.",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use compact A1/A2 key/source/article/content objects (default: enabled).",
     )
     parser.add_argument(
         "--strict-errors",
@@ -479,7 +451,7 @@ def main() -> None:
     problems = validate_config(config)
     if problems:
         raise ValueError(f"Invalid config: {'; '.join(problems)}")
-    system_prompt = PROMPTS[args.prompt_mode]
+    system_prompt = SYSTEM_PROMPT
 
     rows = list(read_json(Path(args.input_diagnostics)))
     if args.limit:
@@ -492,7 +464,7 @@ def main() -> None:
     cached = load_cache(cache_path) if args.resume else {}
     todo = [row for row in rows if str(row["id"]) not in cached]
     log.info(
-        "collective filter rows=%d cached=%d todo=%d workers=%d content_chars=%d batch=%d direct_max=%d prompt_mode=%s",
+        "final collective rows=%d cached=%d todo=%d workers=%d content_chars=%d batch=%d direct_max=%d compact=%s",
         len(rows),
         len(cached),
         len(todo),
@@ -500,7 +472,7 @@ def main() -> None:
         args.content_max_chars,
         args.batch_size,
         args.direct_max,
-        args.prompt_mode,
+        args.compact_candidates,
     )
 
     lock = threading.Lock()
@@ -521,7 +493,7 @@ def main() -> None:
                 preserve_top1=args.preserve_top1,
                 strict_errors=args.strict_errors,
                 system_prompt=system_prompt,
-                prompt_mode=args.prompt_mode,
+                prompt_mode="final_precision_gemma_v5",
                 compact_candidates=args.compact_candidates,
             ): row["id"]
             for row in todo

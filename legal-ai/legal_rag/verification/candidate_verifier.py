@@ -30,65 +30,34 @@ log = logging.getLogger("legal_rag.verification.candidate_verifier")
 
 BATCH_SIZE = 6
 STAGE1_CONTENT_MAX_CHARS = 1800
-STAGE2_CONTENT_MAX_CHARS = 1600
-STAGE2_BATCH_SIZE = 8
-STAGE2_DIRECT_MAX_ARTICLES = 10
-STAGE2_MIN_ARTICLES = 2
-STAGE2_EMPTY_SELECTION_RESCUE_TOP = 2
-STAGE2_SINGLE_SELECTION_RESCUE_TOP = 1
+JSON_REPAIR_MAX_CHARS = 4000
 
 STAGE1_SYSTEM_PROMPT = """\
-You select Vietnamese legal articles for retrieval recall.
+You are the recall-oriented first-pass selector of Vietnamese legal evidence.
 
-Use only:
-- question
-- legal_intents
-- candidate_articles
+Judge each article against the question and legal_intents. Keep an article only if its displayed text provides a concrete rule that may be used in the final answer: a definition, right, obligation, condition, exception, procedure, deadline, authority, required document, remedy, violation, sanction, or legal consequence.
 
-Keep an article if it may be needed to answer the question or any legal intent:
-- direct rule, definition, condition, exception, procedure, deadline, authority
-- right, obligation, penalty, legal consequence, required dossier/evidence
-- one useful article for each independent legal intent
-- both general law and detailed decree/circular if they add different details
+Do not keep an article merely because it belongs to the same law, shares keywords, or concerns the same broad topic. Drop broad purpose, scope, principle, administration, implementation, transition, and responsibility articles unless that exact issue is asked or the text contains a concrete rule needed by an intent. Drop sanction or coercion articles when neither the question nor any intent asks about violation or legal consequences.
 
-Remove only articles that are clearly unrelated, only background, wrong subtask, or duplicate another kept article without adding legal detail.
+The regulated subject and requested subtask must match. Evidence about cooperatives does not answer a question about business incubators. A support type does not answer a question asking only for eligibility conditions. A general accounting duty does not answer a question asking for specific information to present.
 
-If unsure, keep the article.
-Return exactly one valid JSON object. No markdown. No bullets. No explanation:
+Keep overlapping articles only when they contribute different rules. If an excerpt ends before a potentially necessary rule is complete, keep it rather than guessing that it is irrelevant.
+
+Evaluate only this batch. Do not force the batch to cover every intent. An empty selection is valid.
+
+Return exactly one JSON object. Use only candidate keys. No markdown or explanation:
 {
   "selected_article_keys": [],
   "confidence": "high|medium|low"
 }
 """
 
-STAGE2_SYSTEM_PROMPT = """\
-You are a recall-safe Vietnamese legal evidence selector.
-
-Goal: improve precision, but recall is more important.
-
-Your task is to keep the legal articles that may be needed to answer the question.
-
-Use only:
-- the question
-- the legal retrieval intents, if provided
-- the content of each candidate article
-
-Do not rely on outside knowledge.
-Do not select article IDs outside candidate_articles.
-
-Rules:
-1. Keep every article that may be needed to answer any legal intent.
-2. Keep articles for all parts of the question: conditions, procedures, deadlines, penalties, remedies, tax, accounting, documents, authority, exceptions, or definitions.
-3. Keep both a general law article and a detailed decree/circular article if they add different legal details.
-4. Remove only articles that are clearly unrelated, only background, clearly outdated, or duplicate another kept article without adding useful details.
-5. If unsure, keep the article.
-6. Select only article_id values from candidate_articles.
-
-Return valid JSON only, with no explanation:
-{
-  "selected_article_ids": [],
-  "confidence": "high|medium|low"
-}
+JSON_REPAIR_SYSTEM_PROMPT = """\
+Repair JSON syntax only. Do not reconsider the legal articles and do not add a selection.
+Preserve the keys selected in raw_response, but remove keys outside allowed_keys.
+If raw_response clearly selected no keys, return an empty list.
+Return exactly one valid JSON object and nothing else:
+{"selected_article_keys": [], "confidence": "high|medium|low"}
 """
 
 
@@ -192,32 +161,6 @@ def alias_candidates(
     return aliased, key_to_id
 
 
-def parse_verifier_json(raw: str, allowed_ids: set[str]) -> tuple[dict | None, bool]:
-    cleaned = strip_code_fences(raw)
-    match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-    if match:
-        cleaned = match.group(0)
-    try:
-        data = json.loads(cleaned)
-    except (json.JSONDecodeError, TypeError):
-        return None, False
-    if not isinstance(data, dict):
-        return None, False
-    if "selected_article_ids" not in data:
-        return None, False
-    selected = data["selected_article_ids"]
-    if not isinstance(selected, list):
-        return None, False
-    normalized_ids = [str(x).strip() for x in selected]
-    if any(article_id not in allowed_ids for article_id in normalized_ids):
-        return None, False
-    selected = normalized_ids
-    confidence = str(data.get("confidence", "low")).lower().strip()
-    if confidence not in {"high", "medium", "low"}:
-        confidence = "low"
-    return {"selected_article_ids": dedupe_keep_order(selected), "confidence": confidence}, True
-
-
 def parse_stage1_alias_json(raw: str, key_to_id: dict[str, str]) -> tuple[dict | None, bool]:
     cleaned = strip_code_fences(raw)
     match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
@@ -261,6 +204,27 @@ def parse_stage1_alias_json(raw: str, key_to_id: dict[str, str]) -> tuple[dict |
         "selected_article_ids": dedupe_keep_order(selected),
         "confidence": confidence,
     }, True
+
+
+def repair_stage1_alias_json(
+    config,
+    raw: str,
+    key_to_id: dict[str, str],
+) -> tuple[dict | None, bool, str]:
+    """Normalize malformed model JSON without rerunning legal selection."""
+    repaired_raw = get_worker(config).call(
+        "Normalize raw_response into the required JSON schema.",
+        [
+            {
+                "allowed_keys": list(key_to_id),
+                "raw_response": raw[:JSON_REPAIR_MAX_CHARS],
+            }
+        ],
+        system_prompt=JSON_REPAIR_SYSTEM_PROMPT,
+        legal_intents=None,
+    )
+    repaired, ok = parse_stage1_alias_json(repaired_raw, key_to_id)
+    return repaired, ok, repaired_raw
 
 
 def apply_fallback(
@@ -428,48 +392,6 @@ def prepare_cache_for_run(cache_path: Path, resume: bool) -> None:
     log.warning("Fresh run requested; moved existing cache to %s", backup)
 
 
-def run_stage2_call(
-    config,
-    question: str,
-    candidate_articles: list[dict],
-    legal_intents: list[str],
-    *,
-    compact_candidates: bool = False,
-) -> dict:
-    allowed_ids = {c["article_id"] for c in candidate_articles}
-    key_to_id: dict[str, str] = {}
-    prompt_candidates = candidate_articles
-    if compact_candidates:
-        prompt_candidates, key_to_id = alias_candidates(candidate_articles, compact=True)
-    raw = ""
-    verifier_result = None
-    parse_ok = False
-    error = ""
-    try:
-        raw = get_worker(config).call(
-            question,
-            prompt_candidates,
-            system_prompt=STAGE2_SYSTEM_PROMPT,
-            legal_intents=legal_intents,
-        )
-        if compact_candidates:
-            verifier_result, parse_ok = parse_stage1_alias_json(raw, key_to_id)
-        else:
-            verifier_result, parse_ok = parse_verifier_json(raw, allowed_ids)
-    except Exception as exc:
-        error = f"{type(exc).__name__}: {exc}"
-    return {
-        "candidate_article_ids": [c["article_id"] for c in candidate_articles],
-        "candidate_article_keys": key_to_id,
-        "selected_article_keys": verifier_result.get("selected_article_keys", []) if verifier_result else [],
-        "selected_article_ids": verifier_result.get("selected_article_ids", []) if verifier_result else [],
-        "confidence": verifier_result.get("confidence", "low") if verifier_result else "low",
-        "parse_ok": parse_ok,
-        "raw_response": raw[:2000],
-        "error": error,
-    }
-
-
 def merge_confidence(confidence_values: list[str], *, has_error: bool) -> str:
     if has_error:
         return "low"
@@ -482,194 +404,14 @@ def merge_confidence(confidence_values: list[str], *, has_error: bool) -> str:
     return "low"
 
 
-def stage2_minimal_select(
-    config,
-    lookup: ArticleLookup,
-    *,
-    question: str,
-    stage1_article_ids: list[str],
-    legal_intents: list[str],
-    evidence_order: list[str] | None = None,
-    compact_candidates: bool = False,
-    strict_errors: bool = False,
-) -> tuple[list[str], dict]:
-    evidence_order = dedupe_keep_order(evidence_order or stage1_article_ids)
-    if len(stage1_article_ids) < STAGE2_MIN_ARTICLES:
-        return stage1_article_ids, {
-            "enabled": True,
-            "skipped": True,
-            "reason": f"stage1_size_lt_{STAGE2_MIN_ARTICLES}",
-            "selected_article_ids": stage1_article_ids,
-            "confidence": "high",
-            "parse_ok": True,
-            "rounds": [],
-            "fallback_used": False,
-            "fallback_reason": "not_needed",
-        }
-
-    if len(stage1_article_ids) <= 1:
-        return stage1_article_ids, {
-            "enabled": True,
-            "skipped": True,
-            "reason": "stage1_size_le1",
-            "selected_article_ids": stage1_article_ids,
-            "confidence": "high",
-            "parse_ok": True,
-            "rounds": [],
-            "fallback_used": False,
-            "fallback_reason": "not_needed",
-        }
-
-    stage2_candidates, missing = build_candidate_articles(
-        stage1_article_ids,
-        lookup,
-        content_max_chars=STAGE2_CONTENT_MAX_CHARS,
-    )
-    if strict_errors and missing:
-        raise RuntimeError(f"stage2 missing {len(missing)} hydrated articles")
-    hydrated_order = [c["article_id"] for c in stage2_candidates]
-    if not stage2_candidates:
-        return stage1_article_ids, {
-            "enabled": True,
-            "skipped": False,
-            "reason": "no_hydrated_stage2_candidates",
-            "selected_article_ids": stage1_article_ids,
-            "confidence": "low",
-            "parse_ok": False,
-            "rounds": [],
-            "missing_article_ids": missing,
-            "fallback_used": True,
-            "fallback_reason": "stage2_no_hydrated_keep_stage1",
-        }
-
-    rounds: list[dict] = []
-    if len(stage2_candidates) <= STAGE2_DIRECT_MAX_ARTICLES:
-        result = run_stage2_call(
-            config,
-            question,
-            stage2_candidates,
-            legal_intents,
-            compact_candidates=compact_candidates,
-        )
-        result["round"] = "direct"
-        result["batch_index"] = 0
-        rounds.append(result)
-        selected = result["selected_article_ids"] if result["parse_ok"] else []
-        has_error = bool(result.get("error")) or not result["parse_ok"]
-        confidence = merge_confidence([result.get("confidence", "low")], has_error=has_error)
-    else:
-        intermediate: list[str] = []
-        confidence_values: list[str] = []
-        has_error = False
-        for batch_index, batch in enumerate(chunks(stage2_candidates, STAGE2_BATCH_SIZE)):
-            result = run_stage2_call(
-                config,
-                question,
-                batch,
-                legal_intents,
-                compact_candidates=compact_candidates,
-            )
-            result["round"] = "group"
-            result["batch_index"] = batch_index
-            rounds.append(result)
-            if result["parse_ok"]:
-                intermediate.extend(result["selected_article_ids"])
-                confidence_values.append(result.get("confidence", "low"))
-            else:
-                has_error = True
-        intermediate = dedupe_keep_order(intermediate)
-
-        if intermediate:
-            final_candidates, final_missing = build_candidate_articles(
-                intermediate,
-                lookup,
-                content_max_chars=STAGE2_CONTENT_MAX_CHARS,
-            )
-            if final_missing:
-                missing.extend(final_missing)
-                if strict_errors:
-                    raise RuntimeError(
-                        f"stage2 global round missing {len(final_missing)} hydrated articles"
-                    )
-            result = run_stage2_call(
-                config,
-                question,
-                final_candidates,
-                legal_intents,
-                compact_candidates=compact_candidates,
-            )
-            result["round"] = "global"
-            result["batch_index"] = 0
-            rounds.append(result)
-            if result["parse_ok"]:
-                selected = result["selected_article_ids"]
-                confidence_values.append(result.get("confidence", "low"))
-            else:
-                selected = []
-                has_error = True
-        else:
-            selected = []
-            has_error = True
-        confidence = merge_confidence(confidence_values, has_error=has_error)
-
-    if strict_errors and has_error:
-        raise RuntimeError("stage2 technical issue")
-
-    selected = dedupe_keep_order(selected)
-    if not selected:
-        rescued = order_by_reference(
-            evidence_order[:STAGE2_EMPTY_SELECTION_RESCUE_TOP],
-            evidence_order,
-        )
-        return rescued, {
-            "enabled": True,
-            "skipped": False,
-            "reason": "stage2_empty_or_failed",
-            "selected_article_ids": rescued,
-            "confidence": confidence,
-            "parse_ok": all(r.get("parse_ok") for r in rounds),
-            "rounds": rounds,
-            "missing_article_ids": missing,
-            "fallback_used": True,
-            "fallback_reason": f"stage2_empty_rescue_evidence_top{STAGE2_EMPTY_SELECTION_RESCUE_TOP}",
-        }
-
-    single_selection_rescue = False
-    if len(selected) == 1 and evidence_order:
-        selected = dedupe_keep_order(selected + evidence_order[:STAGE2_SINGLE_SELECTION_RESCUE_TOP])
-        single_selection_rescue = True
-    selected = order_by_reference(selected, evidence_order)
-
-    parse_ok = all(r.get("parse_ok") for r in rounds)
-    fallback_used = single_selection_rescue or not parse_ok or any(r.get("error") for r in rounds)
-    return selected, {
-        "enabled": True,
-        "skipped": False,
-        "reason": "stage2_selected",
-        "selected_article_ids": selected,
-        "confidence": confidence,
-        "parse_ok": parse_ok,
-        "rounds": rounds,
-        "missing_article_ids": missing,
-        "fallback_used": fallback_used,
-        "fallback_reason": (
-            f"stage2_single_selection_rescue_top{STAGE2_SINGLE_SELECTION_RESCUE_TOP}"
-            if single_selection_rescue
-            else "stage2_partial_issue_selected" if fallback_used else "trust_stage2_selected"
-        ),
-    }
-
-
 def verify_one(
     config,
     lookup: ArticleLookup,
     row: dict,
     legal_intents: list[str],
     *,
-    stage1_only: bool = False,
     strict_errors: bool = False,
     stage1_compact_candidates: bool = False,
-    stage2_compact_candidates: bool = False,
 ) -> dict:
     qid = row["id"]
     question = row.get("question", "")
@@ -698,6 +440,8 @@ def verify_one(
         verifier_result = None
         parse_ok = False
         error = ""
+        repair_attempted = False
+        repaired_response = ""
         try:
             raw = get_worker(config).call(
                 question,
@@ -706,6 +450,13 @@ def verify_one(
                 legal_intents=legal_intents,
             )
             verifier_result, parse_ok = parse_stage1_alias_json(raw, key_to_id)
+            if not parse_ok and raw.strip():
+                repair_attempted = True
+                verifier_result, parse_ok, repaired_response = repair_stage1_alias_json(
+                    config,
+                    raw,
+                    key_to_id,
+                )
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
         if parse_ok and verifier_result:
@@ -724,6 +475,8 @@ def verify_one(
                 "confidence": verifier_result.get("confidence", "low") if verifier_result else "low",
                 "parse_ok": parse_ok,
                 "raw_response": raw[:2000],
+                "repair_attempted": repair_attempted,
+                "repaired_response": repaired_response[:2000],
                 "error": error,
             }
         )
@@ -745,30 +498,6 @@ def verify_one(
         hydrated_order,
         technical_issue=technical_issue,
     )
-    if stage1_only:
-        final_article_ids = stage1_final_article_ids
-        stage2_result = {
-            "enabled": False,
-            "skipped": True,
-            "reason": "stage1_only",
-            "selected_article_ids": stage1_final_article_ids,
-            "confidence": "high",
-            "parse_ok": True,
-            "rounds": [],
-            "fallback_used": False,
-            "fallback_reason": "not_needed",
-        }
-    else:
-        final_article_ids, stage2_result = stage2_minimal_select(
-            config,
-            lookup,
-            question=question,
-            stage1_article_ids=stage1_final_article_ids,
-            legal_intents=legal_intents,
-            evidence_order=original_order,
-            compact_candidates=stage2_compact_candidates,
-            strict_errors=strict_errors,
-        )
     return {
         "id": qid,
         "question": question,
@@ -784,60 +513,9 @@ def verify_one(
         "fallback_used": fallback_used,
         "fallback_reason": fallback_reason,
         "stage1_final_article_ids": stage1_final_article_ids,
-        "stage2": stage2_result,
-        "final_article_ids": final_article_ids,
+        "final_article_ids": stage1_final_article_ids,
         "raw_response": "",
         "error": "; ".join([b["error"] for b in batch_results if b.get("error")])[:1000],
-    }
-
-
-def verify_stage2_only_one(
-    config,
-    lookup: ArticleLookup,
-    row: dict,
-    legal_intents: list[str],
-    *,
-    stage2_compact_candidates: bool = False,
-    strict_errors: bool = False,
-) -> dict:
-    qid = row["id"]
-    question = row.get("question", "")
-    stage1_final_article_ids = dedupe_keep_order(row.get("final_article_ids", []))
-    final_article_ids, stage2_result = stage2_minimal_select(
-        config,
-        lookup,
-        question=question,
-        stage1_article_ids=stage1_final_article_ids,
-        legal_intents=legal_intents,
-        evidence_order=row.get("candidate_article_ids", stage1_final_article_ids),
-        compact_candidates=stage2_compact_candidates,
-        strict_errors=strict_errors,
-    )
-    return {
-        "id": qid,
-        "question": question,
-        "candidate_article_ids": row.get("candidate_article_ids", stage1_final_article_ids),
-        "hydrated_candidate_count": len(stage1_final_article_ids),
-        "missing_article_ids": [],
-        "verifier_selected_article_ids": stage1_final_article_ids,
-        "verifier_confidence": row.get("verifier_confidence", "low"),
-        "parse_ok": stage2_result.get("parse_ok", False),
-        "parse_ok_batches": 0,
-        "batch_count": 0,
-        "batch_results": [],
-        "fallback_used": row.get("fallback_used", False),
-        "fallback_reason": row.get("fallback_reason", "stage1_cached"),
-        "stage1_final_article_ids": stage1_final_article_ids,
-        "stage2": stage2_result,
-        "final_article_ids": final_article_ids,
-        "raw_response": "",
-        "error": "; ".join(
-            [
-                round_row.get("error", "")
-                for round_row in stage2_result.get("rounds", [])
-                if round_row.get("error")
-            ]
-        )[:1000],
     }
 
 
@@ -905,19 +583,14 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
-    parser = argparse.ArgumentParser(description="Batch-wise bias-free LLM verifier for tiered candidate submissions.")
+    parser = argparse.ArgumentParser(description="Recall-oriented Stage 1 verifier for tiered candidates.")
     parser.add_argument("--config", default="config_vertex_clean.yaml")
     parser.add_argument("--input", default="outputs/submission_bge_intent_tiered_rrf12_bge5_rawintent5_clean/results.json")
-    parser.add_argument(
-        "--stage2-only-from-diagnostics",
-        default=None,
-        help="Read stage-1 verifier diagnostics and run only stage 2 on final_article_ids.",
-    )
     parser.add_argument("--corpus", default="corpus/data/corpus_clean_asof_20260301.json")
     parser.add_argument("--intent-results", default="outputs/intent_ranked_hits_clean_results.json")
-    parser.add_argument("--cache", default="cache/llm_stage2_adaptive_min2_rescue1_c1600_prompt_v2.jsonl")
-    parser.add_argument("--output-dir", default="outputs/submission_stage2_adaptive_min2_rescue1_c1600_prompt_v2")
-    parser.add_argument("--diagnostics", default="outputs/diagnostics_stage2_adaptive_min2_rescue1_c1600_prompt_v2.json")
+    parser.add_argument("--cache", default="cache/stage1_gemma_compact_v4.jsonl")
+    parser.add_argument("--output-dir", default="outputs/submission_stage1_gemma_compact_v4")
+    parser.add_argument("--diagnostics", default="outputs/diagnostics_stage1_gemma_compact_v4.json")
     parser.add_argument("--workers", type=int, default=20)
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
@@ -925,17 +598,7 @@ def main() -> None:
         action="store_true",
         help="Use compact key/source/article/content objects in Stage 1 only.",
     )
-    parser.add_argument(
-        "--stage2-compact-candidates",
-        action="store_true",
-        help="Use compact A1/A2 key/source/article/content objects in Stage 2.",
-    )
     parser.add_argument("--resume", action="store_true")
-    parser.add_argument(
-        "--stage1-only",
-        action="store_true",
-        help="Run only Stage 1 and export stage1_final_article_ids as final_article_ids.",
-    )
     parser.add_argument(
         "--strict-errors",
         action="store_true",
@@ -948,8 +611,7 @@ def main() -> None:
     if problems:
         raise ValueError(f"Invalid config: {'; '.join(problems)}")
 
-    stage2_only = bool(args.stage2_only_from_diagnostics)
-    rows = list(read_json(Path(args.stage2_only_from_diagnostics if stage2_only else args.input)))
+    rows = list(read_json(Path(args.input)))
     if args.limit:
         rows = rows[: args.limit]
     lookup = ArticleLookup(args.corpus)
@@ -960,49 +622,32 @@ def main() -> None:
     records = load_cache(cache_path) if args.resume else {}
     todo = [row for row in rows if row["id"] not in records]
     log.info(
-        "LLM verifier total=%d todo=%d workers=%d input=%s intents=%d stage1_chars=%d stage2_chars=%d stage2_min_articles=%d",
+        "Stage 1 verifier total=%d todo=%d workers=%d input=%s intents=%d content_chars=%d batch=%d",
         len(rows),
         len(todo),
         args.workers,
-        args.stage2_only_from_diagnostics if stage2_only else args.input,
+        args.input,
         len(legal_intents_by_id),
         STAGE1_CONTENT_MAX_CHARS,
-        STAGE2_CONTENT_MAX_CHARS,
-        STAGE2_MIN_ARTICLES,
+        BATCH_SIZE,
     )
 
     lock = threading.Lock()
     started = time.time()
     processed = 0
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        if stage2_only:
-            futures = {
-                ex.submit(
-                    verify_stage2_only_one,
-                    config,
-                    lookup,
-                    row,
-                    legal_intents_by_id.get(str(row["id"]), []),
-                    stage2_compact_candidates=args.stage2_compact_candidates,
-                    strict_errors=args.strict_errors,
-                ): row["id"]
-                for row in todo
-            }
-        else:
-            futures = {
-                ex.submit(
-                    verify_one,
-                    config,
-                    lookup,
-                    row,
-                    legal_intents_by_id.get(str(row["id"]), []),
-                    stage1_only=args.stage1_only,
-                    strict_errors=args.strict_errors,
-                    stage1_compact_candidates=args.stage1_compact_candidates,
-                    stage2_compact_candidates=args.stage2_compact_candidates,
-                ): row["id"]
-                for row in todo
-            }
+        futures = {
+            ex.submit(
+                verify_one,
+                config,
+                lookup,
+                row,
+                legal_intents_by_id.get(str(row["id"]), []),
+                strict_errors=args.strict_errors,
+                stage1_compact_candidates=args.stage1_compact_candidates,
+            ): row["id"]
+            for row in todo
+        }
         for fut in as_completed(futures):
             qid = futures[fut]
             try:

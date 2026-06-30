@@ -5,8 +5,8 @@ Shared base class: the model-call hook (`_chat_complete`) is overridden by the
 gpu (Gemma) and vertex (Gemini) backends; the base implementation is a generic
 OpenAI-compatible call kept only as a fallback.
 
-mock=True: returns a canned answer that contains Điều X patterns from the input
-           articles and the required disclaimer. No network call is made.
+mock=True: returns a canned grounded answer with Điều X citations. No network
+           call is made.
 The LLM client is initialised lazily on first call to generate().
 """
 from __future__ import annotations
@@ -63,14 +63,18 @@ class LegalGenerator:
             articles: Retrieved/reranked article dicts from the retrieval stack.
 
         Returns:
-            Answer string in Vietnamese, containing Điều citations + disclaimer.
+            Grounded answer string in Vietnamese with exact Điều citations.
         """
         if self.mock:
             return self._make_mock_answer(question, articles)
 
         gen_cfg = self.config.generator
         prompt  = self._builder.build_prompt(
-            question, articles, max_articles=gen_cfg.max_articles
+            question,
+            articles,
+            max_articles=gen_cfg.max_articles,
+            content_max_chars=gen_cfg.content_max_chars,
+            total_content_max_chars=gen_cfg.total_content_max_chars,
         )
         return self._chat_complete(prompt["system"], prompt["user"]).strip()
 

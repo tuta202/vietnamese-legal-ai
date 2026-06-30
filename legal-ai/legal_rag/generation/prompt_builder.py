@@ -1,114 +1,119 @@
-"""
-PromptBuilder — stateless builder for LegalGenerator prompts.
-
-Design goals:
-  • Maximise IR recall: instruct the LLM to cite EVERY relevant article
-    (F2 score weights recall 4× over precision).
-  • Maximise QA quality: enforce accurate citation format, no hallucination,
-    practical guidance, and professional-but-accessible Vietnamese writing.
-  • No config dependency: stateless, instantiate anywhere.
-"""
+"""Build compact, grounded prompts for Vietnamese legal answer generation."""
 from __future__ import annotations
 
-_MAX_ARTICLES = 7          # default cap; overridden by GeneratorConfig.max_articles
-_CONTENT_TRUNCATE = 600    # chars per article in user prompt
+_MAX_ARTICLES = 0  # 0 means include every selected article.
+_CONTENT_MAX_CHARS = 2400
+_TOTAL_CONTENT_MAX_CHARS = 48000
+PROMPT_VERSION = "gemma3-grounded-answer-v3-structure-guard-t0"
 
-# ---------------------------------------------------------------------------
-# System prompt (Vietnamese — enforces citation + completeness + disclaimer)
-# ---------------------------------------------------------------------------
 _SYSTEM_PROMPT = """\
-Bạn là chuyên gia tư vấn pháp luật Việt Nam. Nhiệm vụ của bạn là trả lời câu hỏi \
-pháp lý dựa HOÀN TOÀN trên các điều luật được cung cấp trong phần ngữ cảnh.
+You answer Vietnamese legal questions from the supplied legal articles.
 
-QUY TẮC TRẢ LỜI BẮT BUỘC:
+Rules:
+1. Use only the supplied articles. Do not invent legal rules, facts, numbers, deadlines, authorities, or citations.
+2. Answer every part of the question. For multi-issue questions, cover each issue separately.
+3. State the practical conclusion first, then explain conditions, exceptions, procedure, documents, deadlines, authority, consequences, or penalties when supported and relevant.
+4. Cite the exact legal basis for each material conclusion using: "Theo Điều X [tên văn bản] (số/ký hiệu văn bản)". Never cite an article for a rule that it does not contain.
+5. Use every supplied article that materially supports the answer, but do not mention an article merely because it is present in the context.
+6. If a general law and a decree/circular provide different useful details, explain their roles. If provisions appear to conflict or the evidence is insufficient, say so instead of guessing.
+7. Treat every numbered khoản/điểm/item as a separate rule. Attach a condition, exception, penalty, remedy, interest payment, deadline, or consequence to an act only when the same khoản/điểm explicitly links them, or an explicit cross-reference links them.
+8. Never transfer a consequence from a neighboring khoản/điểm to the act being asked about. If the supplied text does not explicitly connect them, omit that consequence or state that the evidence does not establish it.
+9. The fixed article number is shown in each "Article (fixed citation)" header. Numbers inside Content are khoản/điểm/items, not article numbers. Never turn "khoản 2" into "Điều 2". Cite only the header article number, then add khoản/điểm when supported.
+10. Keep penalty amounts and remedies separate. Do not claim that a general remedy article sets a fine amount, and do not apply an interest remedy to documents when it is written only for money or property.
+11. Write in clear, concise Vietnamese for a non-lawyer. Prefer short sections or numbered steps when they improve readability.
 
-1. CHỈ sử dụng thông tin từ các điều luật được cung cấp. Tuyệt đối không bịa thêm \
-điều luật, con số, thời hạn hoặc quy định không có trong ngữ cảnh.
+Suggested answer structure (adapt it to the question):
+- Kết luận
+- Căn cứ và phân tích
+- Cách áp dụng thực tế
 
-2. LUÔN trích dẫn điều luật theo một trong các định dạng sau:
-   • "theo Điều X, [Tên Luật/Nghị định/Thông tư]"
-   • "căn cứ Điều X [Tên văn bản]"
-   • "theo quy định tại Điều X [Tên văn bản]"
-
-3. ĐỀ CẬP TẤT CẢ các điều luật có liên quan đến câu hỏi — không được bỏ sót bất \
-kỳ điều luật nào trong ngữ cảnh. Mỗi điều luật liên quan phải được trích dẫn ít \
-nhất một lần trong câu trả lời.
-
-4. Khi nhiều văn bản pháp luật cùng quy định về một vấn đề, hãy nêu rõ mối quan hệ \
-giữa chúng (ví dụ: luật gốc và nghị định/thông tư hướng dẫn chi tiết).
-
-5. Trình bày các điều luật theo thứ tự từ quan trọng nhất đến ít quan trọng hơn \
-(luật > nghị định > thông tư; điều khoản trực tiếp > điều khoản liên quan).
-
-6. Giải thích các thuật ngữ pháp lý khó hiểu khi cần thiết để người không chuyên \
-pháp luật có thể hiểu và áp dụng được.
-
-7. Viết bằng tiếng Việt, giọng văn chuyên nghiệp nhưng dễ tiếp cận, tránh dùng \
-văn phong hành chính khô khan quá mức.
-
-8. KẾT THÚC câu trả lời PHẢI có đúng đoạn văn sau (nguyên văn):
-   "Lưu ý: Đây là tư vấn sơ bộ dựa trên văn bản pháp luật được cung cấp. Để được \
-tư vấn chính xác, vui lòng liên hệ luật sư hoặc cơ quan có thẩm quyền."
-
-9. BẮT BUỘC: Dù câu hỏi hỏi về văn bản, phạm vi áp dụng, hay đối tượng áp dụng, \
-câu trả lời PHẢI trích dẫn ít nhất một "Điều X" cụ thể từ văn bản liên quan. \
-Ví dụ: "Theo Điều 1 [Tên luật], phạm vi áp dụng bao gồm..."\
+Do not discuss the retrieval process or the supplied context.
 """
 
 _DISCLAIMER = (
-    "Lưu ý: Đây là tư vấn sơ bộ dựa trên văn bản pháp luật được cung cấp. "
-    "Để được tư vấn chính xác, vui lòng liên hệ luật sư hoặc cơ quan có thẩm quyền."
+    "Lưu ý: Nội dung trên được tổng hợp từ các văn bản pháp luật được cung cấp; "
+    "trường hợp cụ thể nên được đối chiếu thêm với cơ quan có thẩm quyền hoặc chuyên gia pháp lý."
 )
 
 
 class PromptBuilder:
-    """
-    Builds system + user prompt dicts for the legal Q&A generator.
-    Stateless — safe to share across threads or calls.
-    """
+    """Stateless prompt builder, safe to share across worker threads."""
 
     def build_prompt(
         self,
         question: str,
         articles: list[dict],
         max_articles: int = _MAX_ARTICLES,
+        content_max_chars: int = _CONTENT_MAX_CHARS,
+        total_content_max_chars: int = _TOTAL_CONTENT_MAX_CHARS,
     ) -> dict[str, str]:
-        """
-        Build prompt messages for chat completion.
+        """Build a grounded generation prompt.
 
-        Args:
-            question:     The user's legal question.
-            articles:     Retrieved article dicts (each must have law_id, law_type,
-                          law_name, dieu_number, dieu_title, content).
-            max_articles: Cap on how many articles to include in context.
-
-        Returns:
-            {"system": str, "user": str}
+        ``max_articles <= 0`` includes every selected article. The total content
+        budget is shared fairly so a large candidate set cannot silently remove
+        later articles from the prompt.
         """
-        context_articles = articles[:max_articles]
-        user_content = self._build_user_content(question, context_articles)
+        context_articles = articles if max_articles <= 0 else articles[:max_articles]
+        article_count = len(context_articles)
+        if article_count:
+            fair_share = max(1, total_content_max_chars // article_count)
+            per_article_chars = min(content_max_chars, fair_share)
+        else:
+            per_article_chars = content_max_chars
+
+        user_content = self._build_user_content(
+            question,
+            context_articles,
+            content_max_chars=per_article_chars,
+        )
         return {"system": _SYSTEM_PROMPT, "user": user_content}
 
-    # ------------------------------------------------------------------
-    # Private
-    # ------------------------------------------------------------------
-
-    def _build_user_content(self, question: str, articles: list[dict]) -> str:
-        blocks = ["Các điều luật liên quan:"]
-        for art in articles:
-            blocks.append(self._format_article(art))
-        blocks.append(f"\nCâu hỏi: {question}")
-        return "\n".join(blocks)
+    def _build_user_content(
+        self,
+        question: str,
+        articles: list[dict],
+        *,
+        content_max_chars: int,
+    ) -> str:
+        blocks = [f"QUESTION:\n{question}", "LEGAL ARTICLES:"]
+        for index, article in enumerate(articles, start=1):
+            blocks.append(self._format_article(article, index, content_max_chars))
+        blocks.append("Write the final answer in Vietnamese.")
+        return "\n\n".join(blocks)
 
     @staticmethod
-    def _format_article(art: dict) -> str:
-        law_type = art.get("law_type", "")
-        law_id   = art.get("law_id", "")
-        dieu_num = art.get("dieu_number", "")
-        title    = art.get("dieu_title", "")
-        content  = art.get("content", "")[:_CONTENT_TRUNCATE]
-        if len(art.get("content", "")) > _CONTENT_TRUNCATE:
-            content += "..."
+    def _content_excerpt(content: str, max_chars: int) -> str:
+        content = " ".join(str(content or "").split())
+        if len(content) <= max_chars:
+            return content
+        marker = "\n[... phần giữa được rút gọn ...]\n"
+        if max_chars <= len(marker) + 40:
+            return content[:max_chars]
 
-        header = f"[{law_type} {law_id}] {dieu_num}. {title}"
-        return f"---\n{header}\n{content}"
+        # Preserve the operative opening and late exceptions/conclusions.
+        available_chars = max_chars - len(marker)
+        tail_chars = max(20, available_chars // 4)
+        head_chars = available_chars - tail_chars
+        return (
+            content[:head_chars].rstrip()
+            + marker
+            + content[-tail_chars:].lstrip()
+        )
+
+    @classmethod
+    def _format_article(cls, article: dict, index: int, content_max_chars: int) -> str:
+        law_type = str(article.get("law_type", "")).strip()
+        law_name = str(article.get("law_name", "")).strip()
+        law_id = str(article.get("law_id", "")).strip()
+        article_number = str(article.get("dieu_number", "")).strip()
+        article_title = str(article.get("dieu_title", "")).strip()
+        content = cls._content_excerpt(article.get("content", ""), content_max_chars)
+
+        source = " ".join(part for part in (law_type, law_name) if part)
+        if law_id:
+            source = f"{source} ({law_id})" if source else law_id
+        article_heading = ". ".join(part for part in (article_number, article_title) if part)
+        return (
+            f"[A{index}]\nSource: {source}\n"
+            f"Article (fixed citation): {article_heading}\nContent: {content}"
+        )

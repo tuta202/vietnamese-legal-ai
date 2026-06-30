@@ -10,7 +10,7 @@ legal-ai/
 │   ├── generation/      answer prompt and generator
 │   ├── retrieval/       query analysis, global RRF, per-intent RRF
 │   ├── ranking/         intent-wise BGE and tiered candidate union
-│   ├── verification/    Stage 1, cleanup, Stage 2, final verifier, role gate
+│   ├── verification/    Stage 1, cleanup, final collective verifier, role gate
 │   ├── indexing/        BM25 and Qdrant collection builders
 │   ├── orchestration/   strict resumable end-to-end workflow
 │   ├── output/          submission validation and packaging
@@ -48,6 +48,8 @@ legal_rag.verification.candidate_verifier
 legal_rag.verification.deterministic_cleanup
 legal_rag.verification.final_collective
 legal_rag.verification.enforcement_gate
+legal_rag.generation.generate_answers
+legal_rag.output.phase_snapshot
 ```
 
 ## Dependency Direction

@@ -20,6 +20,8 @@ from typing import Callable
 from legal_rag.backends.bge import BgeScorer
 from legal_rag.common.paths import PROJECT_ROOT
 from legal_rag.common.qdrant import create_qdrant_client
+from legal_rag.generation.prompt_builder import PROMPT_VERSION
+from legal_rag.output.submission import validate_submission
 from legal_rag.retrieval.bm25_index import BM25Index
 from legal_rag.retrieval.config import load_config, validate_config
 from legal_rag.retrieval.embedder import embedding_text_sha256
@@ -38,6 +40,18 @@ INTENT_RRF_TOP_K = 10
 TIER_RRF_TOP_K = 12
 TIER_BGE_PER_INTENT = 5
 TIER_RAW_INTENT_PER_INTENT = 5
+STAGE_NAMES = (
+    "01_query_analysis",
+    "02_global_rrf",
+    "03_raw_intent_retrieval",
+    "04_bge_intent_rerank",
+    "05_tiered_union",
+    "06_stage1_compact",
+    "07_penalty_cleanup",
+    "08_final_collective",
+    "09_enforcement_role_gate",
+    "10_answer_generation",
+)
 
 
 @dataclass(frozen=True)
@@ -57,9 +71,9 @@ class RunPaths:
     tiered_results: Path
     stage1_diagnostics: Path
     penalty_diagnostics: Path
-    stage2_diagnostics: Path
     final_diagnostics: Path
     final_results: Path
+    generated_results: Path
 
 
 def make_paths(root: Path) -> RunPaths:
@@ -81,11 +95,11 @@ def make_paths(root: Path) -> RunPaths:
         intent_ranked=artifacts / "intent_ranked_hits.json",
         bge_cache=cache / "bge_intent_scores.jsonl",
         tiered_results=submissions / "tiered_rrf12_bge5_rawintent5" / "results.json",
-        stage1_diagnostics=artifacts / "stage1_compact_diagnostics.json",
-        penalty_diagnostics=submissions / "stage1_penalty_cleanup" / "diagnostics.json",
-        stage2_diagnostics=artifacts / "stage2_compact_diagnostics.json",
+        stage1_diagnostics=artifacts / "stage1_gemma_compact_v4_diagnostics.json",
+        penalty_diagnostics=submissions / "stage1_gemma_v4_penalty_cleanup" / "diagnostics.json",
         final_diagnostics=artifacts / "final_collective_diagnostics.json",
         final_results=submissions / "final_collective" / "results.json",
+        generated_results=submissions / "final_answers" / "results.json",
     )
 
 
@@ -386,6 +400,48 @@ def validate_submission_zip(path: Path, expected_ids: set[str], allowed_articles
         temporary.unlink(missing_ok=True)
 
 
+def validate_generated_rows(
+    path: Path,
+    expected_ids: set[str],
+    allowed_articles: set[str],
+) -> tuple[bool, str]:
+    ok, detail = validate_question_rows(
+        path,
+        expected_ids,
+        require_articles=True,
+        required_fields=("question", "answer", "relevant_docs", "relevant_articles"),
+        allowed_articles=allowed_articles,
+    )
+    if not ok:
+        return ok, detail
+    valid, errors = validate_submission(read_json(path))
+    if not valid:
+        return False, f"generated submission errors={len(errors)} examples={errors[:3]}"
+    return True, f"{len(expected_ids)} complete grounded answers"
+
+
+def validate_generated_zip(
+    path: Path,
+    expected_ids: set[str],
+    allowed_articles: set[str],
+) -> tuple[bool, str]:
+    if not path.exists():
+        return False, f"missing {path}"
+    try:
+        with zipfile.ZipFile(path) as archive:
+            if archive.namelist() != ["results.json"]:
+                return False, f"unexpected ZIP entries: {archive.namelist()}"
+            rows = json.loads(archive.read("results.json").decode("utf-8"))
+    except Exception as exc:
+        return False, f"invalid generated submission ZIP: {exc}"
+    temporary = path.parent / ".generated_zip_validation.json"
+    try:
+        atomic_write_json(temporary, rows)
+        return validate_generated_rows(temporary, expected_ids, allowed_articles)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def run_deterministic_stage(
     *,
     name: str,
@@ -414,6 +470,35 @@ def run_deterministic_stage(
         raise RuntimeError(f"Stage {name} output validation failed: {detail}")
     manifest["stages"][name] = {"status": "complete", "detail": detail, "updated_at": utc_now()}
     atomic_write_json(manifest_path, manifest)
+
+
+def ensure_phase_submission(
+    *,
+    command: list[str],
+    results_path: Path,
+    expected_ids: set[str],
+    allowed_articles: set[str],
+    log_path: Path,
+) -> None:
+    valid, detail = validate_question_rows(
+        results_path,
+        expected_ids,
+        require_articles=True,
+        allowed_articles=allowed_articles,
+    )
+    if valid:
+        return
+    return_code = run_process(command, log_path)
+    if return_code:
+        raise RuntimeError(f"Phase submission command exited with code {return_code}")
+    valid, detail = validate_question_rows(
+        results_path,
+        expected_ids,
+        require_articles=True,
+        allowed_articles=allowed_articles,
+    )
+    if not valid:
+        raise RuntimeError(f"Phase submission validation failed: {detail}")
 
 
 def preflight(
@@ -606,6 +691,10 @@ def preflight(
                 "legal_rag/verification/deterministic_cleanup.py",
                 "legal_rag/verification/final_collective.py",
                 "legal_rag/verification/enforcement_gate.py",
+                "legal_rag/generation/prompt_builder.py",
+                "legal_rag/generation/llm_generator.py",
+                "legal_rag/generation/generate_answers.py",
+                "legal_rag/output/phase_snapshot.py",
                 "legal_rag/orchestration/best_pipeline.py",
                 "legal_rag/retrieval/bm25_index.py",
                 "legal_rag/retrieval/config.py",
@@ -620,13 +709,75 @@ def preflight(
     return questions, fingerprint, allowed_articles
 
 
-def prepare_manifest(path: Path, fingerprint: dict, settings: dict) -> dict:
+def prepare_manifest(
+    path: Path,
+    fingerprint: dict,
+    settings: dict,
+    *,
+    accept_code_change: bool = False,
+    accept_runtime_change: bool = False,
+    accept_workflow_change: bool = False,
+) -> dict:
     if path.exists():
         manifest = read_json(path)
-        if manifest.get("fingerprint") != fingerprint:
-            raise ValueError("Run manifest fingerprint differs from current input/corpus/index/config")
-        if manifest.get("settings") != settings:
-            raise ValueError("Run manifest workflow settings differ from this command")
+        settings_changed = manifest.get("settings") != settings
+        if settings_changed:
+            if not accept_workflow_change:
+                raise ValueError(
+                    "Run manifest workflow settings differ from this command. "
+                    "Use --accept-workflow-change only when you intentionally changed later "
+                    "pipeline stages and want to reuse validated upstream artifacts."
+                )
+        fingerprint_changed = manifest.get("fingerprint") != fingerprint
+        changed_keys: set[str] = set()
+        if fingerprint_changed:
+            previous = manifest.get("fingerprint", {})
+            changed_keys = {
+                key
+                for key in set(previous) | set(fingerprint)
+                if previous.get(key) != fingerprint.get(key)
+            }
+            accepted_keys = set()
+            if accept_code_change:
+                accepted_keys.add("code_sha256")
+            if accept_runtime_change:
+                accepted_keys.add("runtime_target_sha256")
+            unaccepted_keys = changed_keys - accepted_keys
+            if unaccepted_keys:
+                raise ValueError(
+                    "Run manifest fingerprint differs from the current run "
+                    f"(changed: {', '.join(sorted(changed_keys))}). "
+                    "Use --accept-code-change for an intentional code-only change and/or "
+                    "--accept-runtime-change after intentionally redeploying model endpoints. "
+                    "Input, corpus, BM25 index, and config cannot be overridden."
+                )
+        if settings_changed or fingerprint_changed:
+            accepted_at = utc_now()
+            if settings_changed:
+                manifest.setdefault("workflow_change_history", []).append(
+                    {
+                        "accepted_at": accepted_at,
+                        "previous_settings": manifest.get("settings", {}),
+                    }
+                )
+                manifest["settings"] = settings
+            if "code_sha256" in changed_keys:
+                manifest.setdefault("code_change_history", []).append(
+                    {
+                        "accepted_at": accepted_at,
+                        "previous_code_sha256": previous.get("code_sha256", {}),
+                    }
+                )
+            if "runtime_target_sha256" in changed_keys:
+                manifest.setdefault("runtime_change_history", []).append(
+                    {
+                        "accepted_at": accepted_at,
+                        "previous_runtime_target_sha256": previous.get("runtime_target_sha256", ""),
+                    }
+                )
+            if fingerprint_changed:
+                manifest["fingerprint"] = fingerprint
+            atomic_write_json(path, manifest)
         return manifest
     manifest = {
         "workflow": "best-asof-20260301-v1",
@@ -640,6 +791,10 @@ def prepare_manifest(path: Path, fingerprint: dict, settings: dict) -> dict:
 
 
 def main() -> None:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Run the proven legal RAG submission workflow end to end.")
     parser.add_argument("--config", default="config_vertex_clean.yaml")
     parser.add_argument("--input", default="../R2AIStage1DATA.json")
@@ -654,7 +809,34 @@ def main() -> None:
     parser.add_argument("--llm-workers", type=int, default=12)
     parser.add_argument("--max-resume-passes", type=int, default=3)
     parser.add_argument("--preflight-only", action="store_true")
+    parser.add_argument(
+        "--stop-after-stage",
+        choices=STAGE_NAMES,
+        default="",
+        help="Stop cleanly after this stage; rerun with the same run-dir to continue",
+    )
+    parser.add_argument("--list-stages", action="store_true")
+    parser.add_argument(
+        "--accept-code-change",
+        action="store_true",
+        help="Resume an existing run after a code-only fingerprint change",
+    )
+    parser.add_argument(
+        "--accept-runtime-change",
+        action="store_true",
+        help="Resume an existing run after intentionally redeploying model endpoints",
+    )
+    parser.add_argument(
+        "--accept-workflow-change",
+        action="store_true",
+        help="Reuse validated upstream artifacts after intentionally changing later stages",
+    )
     args = parser.parse_args()
+
+    if args.list_stages:
+        for stage_name in STAGE_NAMES:
+            print(stage_name)
+        return
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     config_path = (ROOT / args.config).resolve()
@@ -685,19 +867,48 @@ def main() -> None:
         "tier_raw_intent_per_intent": TIER_RAW_INTENT_PER_INTENT,
         "stage1_batch": 6,
         "stage1_content_chars": 1800,
-        "stage2_content_chars": 1600,
+        "stage1_prompt_version": "gemma-recall-v4",
         "final_content_chars": 2200,
         "final_batch": 6,
         "final_direct_max": 8,
+        "final_min_size": 2,
         "final_preserve_top1": False,
+        "final_compact_candidates": True,
+        "final_prompt_version": "gemma-precision-v5",
+        "generation_prompt_version": PROMPT_VERSION,
+        "generation_max_articles": 0,
+        "generation_content_chars": 2400,
+        "generation_total_content_chars": 48000,
     }
-    manifest = prepare_manifest(paths.manifest, fingerprint, settings)
+    manifest = prepare_manifest(
+        paths.manifest,
+        fingerprint,
+        settings,
+        accept_code_change=args.accept_code_change,
+        accept_runtime_change=args.accept_runtime_change,
+        accept_workflow_change=args.accept_workflow_change,
+    )
     if args.preflight_only:
         log.info("Preflight complete; no pipeline stages were run")
         return
 
     py = sys.executable
     common = ["--config", str(config_path), "--input", str(input_path)]
+
+    def stop_if_requested(stage_name: str, submission: Path | None = None) -> bool:
+        if args.stop_after_stage != stage_name:
+            return False
+        manifest["status"] = "paused"
+        manifest["completed_through"] = stage_name
+        manifest["paused_at"] = utc_now()
+        if submission is not None:
+            manifest["phase_submission"] = str(submission)
+        atomic_write_json(paths.manifest, manifest)
+        if submission is None:
+            log.info("Stopped after %s (this phase has no article submission)", stage_name)
+        else:
+            log.info("Stopped after %s; phase submission: %s", stage_name, submission)
+        return True
 
     run_resumable_stage(
         name="01_query_analysis",
@@ -726,6 +937,8 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("01_query_analysis"):
+        return
 
     rrf_prefix = paths.submissions / "rrf_top"
     run_resumable_stage(
@@ -767,6 +980,8 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("02_global_rrf", paths.submissions / "rrf_top60_clean" / "submission.zip"):
+        return
 
     run_resumable_stage(
         name="03_raw_intent_retrieval",
@@ -797,6 +1012,31 @@ def main() -> None:
         errors_path=paths.errors,
     )
 
+    raw_intent_dir = paths.submissions / "raw_intent_top5_union"
+    ensure_phase_submission(
+        command=[
+            py,
+            "-m",
+            "legal_rag.output.phase_snapshot",
+            "--mode",
+            "raw-intent",
+            "--input",
+            str(input_path),
+            "--intent-results",
+            str(paths.intent_ranked),
+            "--top-each",
+            str(TIER_RAW_INTENT_PER_INTENT),
+            "--output-dir",
+            str(raw_intent_dir),
+        ],
+        results_path=raw_intent_dir / "results.json",
+        expected_ids=expected_ids,
+        allowed_articles=allowed_articles,
+        log_path=paths.logs / "03_raw_intent_submission.log",
+    )
+    if stop_if_requested("03_raw_intent_retrieval", raw_intent_dir / "submission.zip"):
+        return
+
     run_resumable_stage(
         name="04_bge_intent_rerank",
         base_command=[
@@ -825,6 +1065,33 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+
+    bge_intent_dir = paths.submissions / "bge_intent_top5_union"
+    ensure_phase_submission(
+        command=[
+            py,
+            "-m",
+            "legal_rag.output.phase_snapshot",
+            "--mode",
+            "bge-intent",
+            "--input",
+            str(input_path),
+            "--intent-results",
+            str(paths.intent_ranked),
+            "--bge-cache",
+            str(paths.bge_cache),
+            "--top-each",
+            str(TIER_BGE_PER_INTENT),
+            "--output-dir",
+            str(bge_intent_dir),
+        ],
+        results_path=bge_intent_dir / "results.json",
+        expected_ids=expected_ids,
+        allowed_articles=allowed_articles,
+        log_path=paths.logs / "04_bge_intent_submission.log",
+    )
+    if stop_if_requested("04_bge_intent_rerank", bge_intent_dir / "submission.zip"):
+        return
 
     tiered_dir = paths.submissions / "tiered_rrf12_bge5_rawintent5"
     run_deterministic_stage(
@@ -866,8 +1133,10 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("05_tiered_union", tiered_dir / "submission.zip"):
+        return
 
-    stage1_dir = paths.submissions / "stage1_compact"
+    stage1_dir = paths.submissions / "stage1_gemma_compact_v4"
     run_resumable_stage(
         name="06_stage1_compact",
         base_command=[
@@ -883,7 +1152,7 @@ def main() -> None:
             "--intent-results",
             str(paths.intent_ranked),
             "--cache",
-            str(paths.cache / "stage1_compact.jsonl"),
+            str(paths.cache / "stage1_gemma_compact_v4.jsonl"),
             "--output-dir",
             str(stage1_dir),
             "--diagnostics",
@@ -891,7 +1160,6 @@ def main() -> None:
             "--workers",
             str(args.llm_workers),
             "--stage1-compact-candidates",
-            "--stage1-only",
             "--strict-errors",
         ],
         validator=lambda: validate_question_rows(
@@ -906,8 +1174,10 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("06_stage1_compact", stage1_dir / "submission.zip"):
+        return
 
-    penalty_dir = paths.submissions / "stage1_penalty_cleanup"
+    penalty_dir = paths.submissions / "stage1_gemma_v4_penalty_cleanup"
     run_deterministic_stage(
         name="07_penalty_cleanup",
         command=[
@@ -934,49 +1204,12 @@ def main() -> None:
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
-
-    stage2_dir = paths.submissions / "stage2_compact"
-    run_resumable_stage(
-        name="08_stage2_compact",
-        base_command=[
-            py,
-            "-m",
-            "legal_rag.verification.candidate_verifier",
-            "--config",
-            str(config_path),
-            "--stage2-only-from-diagnostics",
-            str(paths.penalty_diagnostics),
-            "--corpus",
-            str(corpus_path),
-            "--intent-results",
-            str(paths.intent_ranked),
-            "--cache",
-            str(paths.cache / "stage2_compact.jsonl"),
-            "--output-dir",
-            str(stage2_dir),
-            "--diagnostics",
-            str(paths.stage2_diagnostics),
-            "--workers",
-            str(args.llm_workers),
-            "--stage2-compact-candidates",
-            "--strict-errors",
-        ],
-        validator=lambda: validate_question_rows(
-            stage2_dir / "results.json",
-            expected_ids,
-            require_articles=True,
-            allowed_articles=allowed_articles,
-        ),
-        log_path=paths.logs / "08_stage2_compact.log",
-        max_passes=args.max_resume_passes,
-        manifest=manifest,
-        manifest_path=paths.manifest,
-        errors_path=paths.errors,
-    )
+    if stop_if_requested("07_penalty_cleanup", penalty_dir / "submission.zip"):
+        return
 
     final_dir = paths.submissions / "final_collective"
     run_resumable_stage(
-        name="09_final_collective",
+        name="08_final_collective",
         base_command=[
             py,
             "-m",
@@ -984,13 +1217,13 @@ def main() -> None:
             "--config",
             str(config_path),
             "--input-diagnostics",
-            str(paths.stage2_diagnostics),
+            str(paths.penalty_diagnostics),
             "--intent-results",
             str(paths.intent_ranked),
             "--corpus",
             str(corpus_path),
             "--cache",
-            str(paths.cache / "final_collective.jsonl"),
+            str(paths.cache / "final_collective_gemma_v5.jsonl"),
             "--output-dir",
             str(final_dir),
             "--diagnostics",
@@ -1002,11 +1235,10 @@ def main() -> None:
             "--direct-max",
             "8",
             "--min-size",
-            "3",
+            "2",
             "--workers",
             str(args.llm_workers),
-            "--prompt-mode",
-            "final_precision",
+            "--compact-candidates",
             "--strict-errors",
         ],
         validator=lambda: validate_question_rows(
@@ -1015,16 +1247,18 @@ def main() -> None:
             require_articles=True,
             allowed_articles=allowed_articles,
         ),
-        log_path=paths.logs / "09_final_collective.log",
+        log_path=paths.logs / "08_final_collective.log",
         max_passes=args.max_resume_passes,
         manifest=manifest,
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("08_final_collective", final_dir / "submission.zip"):
+        return
 
     gate_dir = paths.submissions / "best_final_enforcement_gate"
     run_deterministic_stage(
-        name="10_enforcement_role_gate",
+        name="09_enforcement_role_gate",
         command=[
             py,
             "-m",
@@ -1043,14 +1277,53 @@ def main() -> None:
             require_articles=True,
             allowed_articles=allowed_articles,
         ),
-        log_path=paths.logs / "10_enforcement_role_gate.log",
+        log_path=paths.logs / "09_enforcement_role_gate.log",
         manifest=manifest,
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
+    if stop_if_requested("09_enforcement_role_gate", gate_dir / "submission.zip"):
+        return
 
-    final_zip = gate_dir / "submission.zip"
-    zip_ok, zip_detail = validate_submission_zip(final_zip, expected_ids, allowed_articles)
+    generation_dir = paths.submissions / "final_answers"
+    run_resumable_stage(
+        name="10_answer_generation",
+        base_command=[
+            py,
+            "-m",
+            "legal_rag.generation.generate_answers",
+            "--config",
+            str(config_path),
+            "--input",
+            str(gate_dir / "results.json"),
+            "--corpus",
+            str(corpus_path),
+            "--cache",
+            str(paths.cache / "answer_generation.jsonl"),
+            "--output-dir",
+            str(generation_dir),
+            "--errors",
+            str(paths.artifacts / "answer_generation_errors.json"),
+            "--workers",
+            str(args.llm_workers),
+            "--strict-errors",
+        ],
+        validator=lambda: validate_generated_rows(
+            paths.generated_results,
+            expected_ids,
+            allowed_articles,
+        ),
+        log_path=paths.logs / "10_answer_generation.log",
+        max_passes=args.max_resume_passes,
+        manifest=manifest,
+        manifest_path=paths.manifest,
+        errors_path=paths.errors,
+    )
+    if stop_if_requested("10_answer_generation", generation_dir / "submission.zip"):
+        return
+
+    final_zip = generation_dir / "submission.zip"
+    zip_ok, zip_detail = validate_generated_zip(final_zip, expected_ids, allowed_articles)
     if not zip_ok:
         raise RuntimeError(zip_detail)
     manifest["status"] = "complete"

@@ -111,6 +111,15 @@ _FEW_SHOTS = [
     },
 ]
 
+_REPAIR_SYSTEM_PROMPT = """\
+Return exactly one valid JSON object for the Vietnamese legal question.
+Use two non-empty string fields and no other text:
+{
+  "rewritten_query": "concise retrieval-ready Vietnamese legal query",
+  "topic_description": "Vietnamese legal topic, terminology, and likely document types; no article numbers"
+}
+"""
+
 
 class QueryRewriter:
     """
@@ -165,15 +174,56 @@ class QueryRewriter:
         messages.extend(_FEW_SHOTS)
         messages.append({"role": "user", "content": question})
         raw = self._chat_complete(messages)
+        try:
+            return self._parse_strict_response(raw)
+        except (json.JSONDecodeError, TypeError, ValueError) as initial_error:
+            repair_messages = [
+                {"role": "system", "content": _REPAIR_SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ]
+            repaired_raw = self._chat_complete(repair_messages)
+            try:
+                return self._parse_strict_response(repaired_raw)
+            except (json.JSONDecodeError, TypeError, ValueError) as repair_error:
+                raise ValueError(
+                    "rewrite response invalid after JSON repair: "
+                    f"initial={initial_error}; repair={repair_error}; "
+                    f"repair_raw={repaired_raw[:300]!r}"
+                ) from repair_error
+
+    @staticmethod
+    def _parse_strict_response(raw: str) -> RewriteResult:
+        """Parse both required fields without introducing semantic fallbacks."""
         cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip(), flags=re.MULTILINE)
         cleaned = re.sub(r"```\s*$", "", cleaned, flags=re.MULTILINE)
         try:
             data = json.loads(cleaned)
         except json.JSONDecodeError:
             match = re.search(r"\{.*\}", cleaned, flags=re.DOTALL)
-            if not match:
-                raise ValueError("rewrite response does not contain a JSON object")
-            data = json.loads(match.group(0))
+            if match:
+                try:
+                    data = json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    data = None
+            else:
+                data = None
+            if data is None:
+                rewritten_match = re.search(
+                    r'"rewritten_query"\s*:\s*"((?:\\.|[^"\\])*)"',
+                    cleaned,
+                    flags=re.DOTALL,
+                )
+                topic_match = re.search(
+                    r'"topic_description"\s*:\s*"((?:\\.|[^"\\])*)"',
+                    cleaned,
+                    flags=re.DOTALL,
+                )
+                if not rewritten_match or not topic_match:
+                    raise ValueError("rewrite response does not contain both required JSON fields")
+                data = {
+                    "rewritten_query": json.loads(f'"{rewritten_match.group(1)}"'),
+                    "topic_description": json.loads(f'"{topic_match.group(1)}"'),
+                }
         if not isinstance(data, dict):
             raise ValueError("rewrite response must be a JSON object")
         rewritten_query = str(data.get("rewritten_query") or "").strip()

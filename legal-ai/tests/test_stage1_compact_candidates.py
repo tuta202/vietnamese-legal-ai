@@ -1,4 +1,5 @@
 from legal_rag.verification import candidate_verifier as llm_candidate_verifier
+from legal_rag.verification import final_collective
 import pytest
 from legal_rag.verification.final_collective import (
     alias_candidates as alias_collective_candidates,
@@ -7,8 +8,6 @@ from legal_rag.verification.final_collective import (
 from legal_rag.verification.candidate_verifier import (
     alias_candidates,
     parse_stage1_alias_json,
-    run_stage2_call,
-    stage2_minimal_select,
     verify_one,
 )
 from legal_rag.retrieval.embedder import embedding_text_sha256, format_document_text
@@ -75,41 +74,15 @@ def test_alias_parser_rejects_schema_and_unknown_key_errors(raw):
     assert ok is False
 
 
-def test_stage2_compact_payload_maps_alias_back_to_article_id(monkeypatch):
-    captured = {}
+def test_stage1_repairs_malformed_json_without_fallback(monkeypatch):
+    calls = []
 
     class Worker:
         def call(self, question, candidate_articles, *, system_prompt, legal_intents):
-            captured["candidate_articles"] = candidate_articles
+            calls.append(system_prompt)
+            if len(calls) == 1:
+                return '{"selected": ["A1"], "confidence": "high"}'
             return '{"selected_article_keys":["A1"],"confidence":"high"}'
-
-    monkeypatch.setattr(llm_candidate_verifier, "get_worker", lambda _config: Worker())
-
-    result = run_stage2_call(
-        object(),
-        "Cau hoi",
-        [candidate()],
-        ["Y dinh phap ly"],
-        compact_candidates=True,
-    )
-
-    assert captured["candidate_articles"] == [
-        {
-            "key": "A1",
-            "source": "123/2020/ND-CP - Quy dinh ve hoa don, chung tu",
-            "article": "Dieu 15. Dang ky su dung hoa don dien tu",
-            "content": "Noi dung dieu luat",
-        }
-    ]
-    assert result["parse_ok"] is True
-    assert result["selected_article_keys"] == ["A1"]
-    assert result["selected_article_ids"] == [candidate()["article_id"]]
-
-
-def test_stage2_strict_errors_does_not_fallback_or_cache(monkeypatch):
-    class FailingWorker:
-        def call(self, *args, **kwargs):
-            raise RuntimeError("temporary API error")
 
     class Lookup:
         def verifier_candidate(self, article_id, content_max_chars):
@@ -117,18 +90,21 @@ def test_stage2_strict_errors_does_not_fallback_or_cache(monkeypatch):
             item["article_id"] = article_id
             return item
 
-    monkeypatch.setattr(llm_candidate_verifier, "get_worker", lambda _config: FailingWorker())
+    monkeypatch.setattr(llm_candidate_verifier, "get_worker", lambda _config: Worker())
 
-    with pytest.raises(RuntimeError, match="stage2 technical issue"):
-        stage2_minimal_select(
-            object(),
-            Lookup(),
-            question="Cau hoi",
-            stage1_article_ids=["article-1", "article-2"],
-            legal_intents=["Y dinh phap ly"],
-            compact_candidates=True,
-            strict_errors=True,
-        )
+    result = verify_one(
+        object(),
+        Lookup(),
+        {"id": 1, "question": "Cau hoi", "relevant_articles": ["article-1"]},
+        ["intent"],
+        strict_errors=True,
+        stage1_compact_candidates=True,
+    )
+
+    assert result["final_article_ids"] == ["article-1"]
+    assert result["batch_results"][0]["repair_attempted"] is True
+    assert result["batch_results"][0]["parse_ok"] is True
+    assert result["fallback_used"] is True  # Existing one-selection evidence guard.
 
 
 def test_final_collective_compact_candidate_shape():
@@ -145,6 +121,79 @@ def test_final_collective_compact_candidate_shape():
     ]
 
 
+def test_final_collective_trusts_single_selection_without_top1_rescue(monkeypatch):
+    class Worker:
+        def call(self, question, candidate_articles, *, system_prompt, legal_intents):
+            assert all(set(item) == {"key", "source", "article", "content"} for item in candidate_articles)
+            return '{"selected_article_keys":["A2"],"confidence":"high"}'
+
+    class Lookup:
+        def verifier_candidate(self, article_id, content_max_chars):
+            item = candidate()
+            item["article_id"] = article_id
+            return item
+
+    monkeypatch.setattr(final_collective, "get_worker", lambda _config: Worker())
+
+    result = process_collective_question(
+        object(),
+        Lookup(),
+        {
+            "id": 1,
+            "question": "Cau hoi",
+            "final_article_ids": ["article-1", "article-2", "article-3"],
+        },
+        ["intent"],
+        content_max_chars=2200,
+        batch_size=6,
+        direct_max=8,
+        min_size=3,
+        preserve_top1=False,
+        strict_errors=True,
+        system_prompt=final_collective.SYSTEM_PROMPT,
+        prompt_mode="final_precision_gemma_v2",
+        compact_candidates=True,
+    )
+
+    assert result["final_article_ids"] == ["article-2"]
+    assert result["collective_filter"]["fallback_used"] is False
+
+
+def test_final_collective_uses_shortlist_prompt_only_for_batch_rounds(monkeypatch):
+    prompts = []
+
+    class Worker:
+        def call(self, question, candidate_articles, *, system_prompt, legal_intents):
+            prompts.append(system_prompt)
+            return '{"selected_article_keys":["A1"],"confidence":"high"}'
+
+    class Lookup:
+        def verifier_candidate(self, article_id, content_max_chars):
+            item = candidate()
+            item["article_id"] = article_id
+            return item
+
+    monkeypatch.setattr(final_collective, "get_worker", lambda _config: Worker())
+    process_collective_question(
+        object(),
+        Lookup(),
+        {"id": 1, "question": "Cau hoi", "final_article_ids": [f"article-{i}" for i in range(9)]},
+        ["intent"],
+        content_max_chars=2200,
+        batch_size=6,
+        direct_max=8,
+        min_size=2,
+        preserve_top1=False,
+        strict_errors=True,
+        system_prompt=final_collective.SYSTEM_PROMPT,
+        prompt_mode="final_precision_gemma_v4",
+        compact_candidates=True,
+    )
+
+    assert prompts[:-1] == [final_collective.BATCH_SYSTEM_PROMPT] * 2
+    assert prompts[-1] == final_collective.SYSTEM_PROMPT
+
+
 def test_strict_stage1_rejects_missing_hydration():
     class MissingLookup:
         def verifier_candidate(self, article_id, content_max_chars):
@@ -156,7 +205,6 @@ def test_strict_stage1_rejects_missing_hydration():
             MissingLookup(),
             {"id": 1, "question": "Cau hoi", "relevant_articles": ["article-1"]},
             ["intent"],
-            stage1_only=True,
             strict_errors=True,
         )
 

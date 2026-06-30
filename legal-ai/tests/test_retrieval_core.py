@@ -236,6 +236,59 @@ class TestQueryRewriterMock:
         assert set(result.keys()) == {"rewritten_query", "topic_description"}
 
 
+class TestQueryRewriterStrictRepair:
+    class StubRewriter(QueryRewriter):
+        def __init__(self, config, responses):
+            super().__init__(config, mock=False)
+            self.responses = iter(responses)
+            self.messages = []
+
+        def _chat_complete(self, messages):
+            self.messages.append(messages)
+            return next(self.responses)
+
+    def test_repairs_missing_required_field(self, default_config):
+        rewriter = self.StubRewriter(
+            default_config,
+            [
+                '{"rewritten_query":"truy vấn"}',
+                '{"rewritten_query":"truy vấn","topic_description":"chủ đề pháp lý"}',
+            ],
+        )
+
+        result = rewriter.rewrite_strict("Câu hỏi")
+
+        assert result == {
+            "rewritten_query": "truy vấn",
+            "topic_description": "chủ đề pháp lý",
+        }
+        assert len(rewriter.messages) == 2
+        assert len(rewriter.messages[1]) == 2
+
+    def test_salvages_both_fields_from_malformed_json_without_semantic_fallback(self, default_config):
+        rewriter = self.StubRewriter(
+            default_config,
+            ['{"rewritten_query":"truy vấn" "topic_description":"chủ đề"}'],
+        )
+
+        result = rewriter.rewrite_strict("Câu hỏi")
+
+        assert result["rewritten_query"] == "truy vấn"
+        assert result["topic_description"] == "chủ đề"
+        assert len(rewriter.messages) == 1
+
+    def test_raises_when_initial_and_repair_responses_are_invalid(self, default_config):
+        rewriter = self.StubRewriter(
+            default_config,
+            ['{"rewritten_query":"x"}', '{"topic_description":"y"}'],
+        )
+
+        with pytest.raises(ValueError, match="invalid after JSON repair"):
+            rewriter.rewrite_strict("Câu hỏi")
+
+        assert len(rewriter.messages) == 2
+
+
 class TestRerankerMock:
     def test_mock_preserves_order(self, default_config):
         reranker = LegalReranker(default_config, mock=True)
