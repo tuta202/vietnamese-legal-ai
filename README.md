@@ -329,8 +329,8 @@ outputs/runs/<run-name>/
 Kết quả cuối:
 
 ```text
-outputs/runs/<run-name>/submissions/final_answers/results.json
-outputs/runs/<run-name>/submissions/final_answers/submission.zip
+outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/results.json
+outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/submission.zip
 ```
 
 ## 15. Checklist tái hiện

@@ -11,6 +11,7 @@ import re
 import shutil
 import sys
 import threading
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,25 @@ log = logging.getLogger("legal_rag.generation.generate_answers")
 _CACHE_LOCK = threading.Lock()
 _WORKER_LOCAL = threading.local()
 _CITATION_RE = re.compile(r"Điều\s+\d+", re.UNICODE)
+_ARTICLE_NUMBER_RE = re.compile(r"Điều\s+(\d+[a-zđ]?)", re.IGNORECASE | re.UNICODE)
+_LEGAL_ID_RE = re.compile(
+    r"\b(?:\d{1,4}(?:/\d{4})?/[0-9A-ZÀ-ỸĐ-]+(?:-[0-9A-ZÀ-ỸĐ-]+)*"
+    r"|\d{1,4}-[0-9A-ZÀ-ỸĐ-]+/[0-9A-ZÀ-ỸĐ-]+"
+    r"|\d{1,4}-[A-ZÀ-ỸĐ][0-9A-ZÀ-ỸĐ-]*)\b",
+    re.IGNORECASE | re.UNICODE,
+)
+_CITATION_CLAUSE_MAX_CHARS = 300
+_DIRECT_CITATION_MAX_DISTANCE = 100
+_CITATION_BOUNDARY_RE = re.compile(r"[\n.;]")
+_STANDARD_LEGAL_ID_RE = re.compile(
+    r"^(?:\d{1,4}/\d{4}/(?:QH\d+|NĐ-CP|ND-CP|TT[A-ZÀ-ỸĐ0-9-]*|"
+    r"TTLT[A-ZÀ-ỸĐ0-9-]*|NQ[A-ZÀ-ỸĐ0-9-]*|UBTVQH[A-ZÀ-ỸĐ0-9-]*)"
+    r"|\d{1,4}-(?:CP|HĐBT|TC[A-ZÀ-ỸĐ0-9/-]*))$",
+    re.IGNORECASE | re.UNICODE,
+)
+_INVALID_PAIR_DETAIL_RE = re.compile(r"([0-9]+[a-z\u0111]?)\s+\(([^)]+)\)", re.IGNORECASE)
+_EVIDENCE_REFERENCE_MAX_DISTANCE = 300
+_ARTICLE_HEADER_SCAN_CHARS = 240
 
 
 def dedupe_keep_order(values: list[str]) -> list[str]:
@@ -150,20 +170,278 @@ def prepare_cache(path: Path, resume: bool) -> None:
     log.warning("Fresh generation run requested; moved existing cache to %s", backup)
 
 
-def answer_is_valid(answer: str) -> bool:
-    return bool(str(answer or "").strip() and _CITATION_RE.search(str(answer)))
+def normalize_citation_part(value: object) -> str:
+    text = unicodedata.normalize("NFC", str(value or "")).upper()
+    return re.sub(r"\s+", "", text)
+
+
+def article_citation_pair(article: dict[str, Any]) -> tuple[str, str] | None:
+    number_match = _ARTICLE_NUMBER_RE.search(str(article.get("dieu_number") or ""))
+    law_id = normalize_citation_part(article.get("law_id"))
+    if not number_match or not law_id:
+        return None
+    return number_match.group(1).casefold(), law_id
+
+
+def invalid_pairs_from_detail(detail: str) -> set[tuple[str, str]]:
+    return {
+        (match.group(1).casefold(), normalize_citation_part(match.group(2)))
+        for match in _INVALID_PAIR_DETAIL_RE.finditer(detail)
+    }
+
+
+def evidence_explanation_for_invalid_pair(
+    pair: tuple[str, str],
+    articles: list[dict[str, Any]],
+) -> str | None:
+    """Return why an outside-input citation may still be evidence-derived.
+
+    This deliberately requires textual evidence. Merely sharing a law or an
+    article number is not enough to downgrade a hard failure.
+    """
+    article_number, law_id = pair
+    for article in articles:
+        article_law_id = normalize_citation_part(article.get("law_id"))
+        if article_law_id == law_id:
+            metadata_pair = article_citation_pair(article)
+            for header in (
+                str(article.get("dieu_title") or ""),
+                str(article.get("content") or "")[:_ARTICLE_HEADER_SCAN_CHARS],
+            ):
+                header_match = _ARTICLE_NUMBER_RE.match(header.lstrip())
+                if (
+                    header_match
+                    and header_match.group(1).casefold() == article_number
+                    and metadata_pair != pair
+                ):
+                    return "supplied article metadata conflicts with its title/content header"
+
+        evidence_text = "\n".join(
+            [
+                str(article.get("dieu_title") or ""),
+                str(article.get("content") or ""),
+            ]
+        )
+        for mention in _ARTICLE_NUMBER_RE.finditer(evidence_text):
+            if mention.group(1).casefold() != article_number:
+                continue
+            start = max(0, mention.start() - _EVIDENCE_REFERENCE_MAX_DISTANCE)
+            end = min(len(evidence_text), mention.end() + _EVIDENCE_REFERENCE_MAX_DISTANCE)
+            if article_law_id == law_id or law_id in normalize_citation_part(
+                evidence_text[start:end]
+            ):
+                return "citation is an explicit cross-reference in supplied evidence"
+    return None
+
+
+def validate_answer_citations(
+    answer: str,
+    articles: list[dict[str, Any]],
+    known_law_ids: set[str] | None = None,
+) -> tuple[bool, str]:
+    """Validate explicit ``Điều X ... law_id`` citations against supplied evidence.
+
+    Wording and punctuation may vary, but an explicit legal ID appearing near an
+    article mention must form an allowed ``(article_number, law_id)`` pair. Later
+    shorthand mentions such as ``khoản 2 Điều 5`` are tolerated after at least
+    one fully qualified citation has established a valid legal basis.
+    """
+    text = str(answer or "").strip()
+    if not text:
+        return False, "answer is empty"
+
+    allowed_pairs = {
+        pair for article in articles if (pair := article_citation_pair(article)) is not None
+    }
+    allowed_law_ids = {law_id for _number, law_id in allowed_pairs}
+    allowed_article_numbers = {number for number, _law_id in allowed_pairs}
+    normalized_known_law_ids = {
+        normalize_citation_part(law_id) for law_id in (known_law_ids or set())
+    }
+    if not allowed_pairs:
+        return False, "supplied articles do not contain valid citation metadata"
+
+    article_mentions = list(_ARTICLE_NUMBER_RE.finditer(text))
+    if not article_mentions:
+        return False, "answer does not contain an 'Điều X' citation"
+
+    valid_pairs: set[tuple[str, str]] = set()
+    invalid_pairs: set[tuple[str, str]] = set()
+    invalid_unqualified_numbers: set[str] = set()
+    for mention_index, mention in enumerate(article_mentions):
+        article_number = mention.group(1).casefold()
+        left_limit = max(0, mention.start() - _CITATION_CLAUSE_MAX_CHARS)
+        right_limit = min(len(text), mention.end() + _CITATION_CLAUSE_MAX_CHARS)
+        left_text = text[left_limit : mention.start()]
+        right_text = text[mention.end() : right_limit]
+        left_boundaries = list(_CITATION_BOUNDARY_RE.finditer(left_text))
+        if left_boundaries:
+            left_limit += left_boundaries[-1].end()
+        right_boundary = _CITATION_BOUNDARY_RE.search(right_text)
+        if right_boundary:
+            right_limit = mention.end() + right_boundary.start()
+
+        previous_mention_end = (
+            article_mentions[mention_index - 1].end() if mention_index > 0 else left_limit
+        )
+        next_mention_start = (
+            article_mentions[mention_index + 1].start()
+            if mention_index + 1 < len(article_mentions)
+            else right_limit
+        )
+        before_start = max(left_limit, previous_mention_end)
+        after_end = min(right_limit, next_mention_start)
+
+        def recognized_ids(segment: str) -> list[re.Match[str]]:
+            matches: list[re.Match[str]] = []
+            for id_match in _LEGAL_ID_RE.finditer(segment):
+                normalized_id = normalize_citation_part(id_match.group(0))
+                if (
+                    normalized_id in allowed_law_ids
+                    or normalized_id in normalized_known_law_ids
+                    or _STANDARD_LEGAL_ID_RE.fullmatch(normalized_id)
+                ):
+                    matches.append(id_match)
+            return matches
+
+        before_segment = text[before_start : mention.start()]
+        after_segment = text[mention.end() : after_end]
+        before_ids = [
+            id_match
+            for id_match in recognized_ids(before_segment)
+            if len(before_segment) - id_match.end() <= _DIRECT_CITATION_MAX_DISTANCE
+        ]
+        after_ids = [
+            id_match
+            for id_match in recognized_ids(after_segment)
+            if id_match.start() <= _DIRECT_CITATION_MAX_DISTANCE
+        ]
+        parenthesized_article = text[before_start : mention.start()].rstrip().endswith("(")
+        if parenthesized_article and before_ids:
+            selected_id = before_ids[-1]
+        elif after_ids:
+            selected_id = after_ids[0]
+        elif before_ids:
+            selected_id = before_ids[-1]
+        else:
+            if article_number not in allowed_article_numbers:
+                invalid_unqualified_numbers.add(article_number)
+            continue
+        pair = article_number, normalize_citation_part(selected_id.group(0))
+        if pair in allowed_pairs:
+            valid_pairs.add(pair)
+        else:
+            invalid_pairs.add(pair)
+
+    if invalid_pairs:
+        rendered = ", ".join(f"Điều {number} ({law_id})" for number, law_id in sorted(invalid_pairs))
+        return False, f"citation is not present in supplied articles: {rendered}"
+    if invalid_unqualified_numbers:
+        rendered = ", ".join(f"Điều {number}" for number in sorted(invalid_unqualified_numbers))
+        return False, f"unqualified article is not present in supplied articles: {rendered}"
+    if not valid_pairs:
+        return False, "answer has no fully qualified citation from supplied articles"
+    return True, "ok"
+
+
+def answer_requires_regeneration(
+    answer: str,
+    articles: list[dict[str, Any]],
+    known_law_ids: set[str] | None = None,
+) -> tuple[bool, str]:
+    """Request another generation only for a clearly unsupported citation.
+
+    Ambiguous citations are accepted. A citation is considered clearly
+    hallucinated only when it is an explicit article/law pair outside the
+    supplied input and is not explained by a cross-reference or metadata
+    conflict inside that evidence.
+    """
+    if not str(answer or "").strip():
+        return True, "answer is empty"
+
+    valid, detail = validate_answer_citations(answer, articles, known_law_ids)
+    if valid:
+        return False, detail
+    if detail.startswith("citation is not present in supplied articles"):
+        invalid_pairs = invalid_pairs_from_detail(detail)
+        clearly_hallucinated = {
+            pair
+            for pair in invalid_pairs
+            if evidence_explanation_for_invalid_pair(pair, articles) is None
+        }
+        if clearly_hallucinated:
+            return True, detail
+    return False, detail
+
+
+def answer_is_valid(
+    answer: str,
+    articles: list[dict[str, Any]] | None = None,
+    known_law_ids: set[str] | None = None,
+) -> bool:
+    if articles is None:
+        return bool(str(answer or "").strip() and _CITATION_RE.search(str(answer)))
+    requires_regeneration, _detail = answer_requires_regeneration(
+        answer,
+        articles,
+        known_law_ids,
+    )
+    return not requires_regeneration
+
+
+def allowed_citation_labels(articles: list[dict[str, Any]]) -> list[str]:
+    labels: list[str] = []
+    for article in articles:
+        pair = article_citation_pair(article)
+        if pair is None:
+            continue
+        article_number = str(article.get("dieu_number") or "").strip()
+        law_name = str(article.get("law_name") or "").strip()
+        law_id = str(article.get("law_id") or "").strip()
+        labels.append(" ".join(part for part in (article_number, law_name, f"({law_id})") if part))
+    return labels
+
+
+def cached_answer_is_acceptable(
+    cached_row: dict[str, Any],
+    articles: list[dict[str, Any]],
+    known_law_ids: set[str] | None = None,
+) -> bool:
+    answer = str(cached_row.get("answer") or "").strip()
+    if not answer:
+        return False
+    if cached_row.get("citation_repair_applied") is True:
+        return True
+    return answer_is_valid(answer, articles, known_law_ids)
 
 
 def generate_one(config: RetrievalConfig, job: dict[str, Any]) -> dict[str, Any]:
-    answer = get_worker_generator(config).generate(job["question"], job["articles"]).strip()
-    if not answer_is_valid(answer):
-        raise ValueError("Generated answer is empty or does not contain an 'Điều X' citation")
+    generator = get_worker_generator(config)
+    answer = generator.generate(job["question"], job["articles"]).strip()
+    citation_repair_applied = False
+    requires_regeneration, detail = answer_requires_regeneration(
+        answer,
+        job["articles"],
+        job.get("known_law_ids"),
+    )
+    if requires_regeneration:
+        citation_repair_applied = True
+        answer = generator.repair_citations(
+            job["question"],
+            job["articles"],
+            answer,
+            detail,
+            allowed_citation_labels(job["articles"]),
+        ).strip()
+        if not answer:
+            raise ValueError("Citation repair returned an empty answer")
     return {
         "id": job["id"],
         "signature": job["signature"],
         "answer": answer,
         "article_count": len(job["article_refs"]),
         "prompt_version": PROMPT_VERSION,
+        "citation_repair_applied": citation_repair_applied,
     }
 
 
@@ -221,13 +499,18 @@ def main() -> None:
             "question": question,
             "article_refs": article_refs,
             "articles": articles,
+            "known_law_ids": lookup.law_ids,
             "signature": signature,
         }
         cached_row = cached.get(question_id)
         if (
             cached_row
             and cached_row.get("signature") == signature
-            and answer_is_valid(cached_row.get("answer", ""))
+            and cached_answer_is_acceptable(
+                cached_row,
+                articles,
+                lookup.law_ids,
+            )
         ):
             valid_cached[question_id] = cached_row
         else:
@@ -267,7 +550,10 @@ def main() -> None:
     for row in input_rows:
         question_id = str(row["id"])
         generated = valid_cached.get(question_id)
-        if generated is None or not answer_is_valid(generated.get("answer", "")):
+        articles = [lookup.require(article_ref) for article_ref in row.get("relevant_articles", [])]
+        if generated is None or not cached_answer_is_acceptable(
+            generated, articles, lookup.law_ids
+        ):
             missing.append(question_id)
             continue
         article_refs = dedupe_keep_order(row.get("relevant_articles", []))
@@ -292,6 +578,17 @@ def main() -> None:
     if not valid:
         raise ValueError("Generated submission is invalid: " + "; ".join(validation_errors[:10]))
     zip_path = save_submission(output_rows, output_dir)
+    (output_dir / "generation_metadata.json").write_text(
+        json.dumps(
+            {
+                "prompt_version": PROMPT_VERSION,
+                "row_count": len(output_rows),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     log.info("Final answer submission complete: %s", zip_path)
 
 

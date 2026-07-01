@@ -48,6 +48,7 @@ class ArticleLookup:
             raise ValueError(
                 f"Duplicate (law_id, dieu_number) keys in {self.corpus_path}: {sample}"
             )
+        self.law_ids = {law_id for law_id, _dieu_number in self.by_key}
 
     def get(self, article_ref: str) -> dict[str, Any] | None:
         try:

@@ -50,7 +50,8 @@ STAGE_NAMES = (
     "07_penalty_cleanup",
     "08_final_collective",
     "09_enforcement_role_gate",
-    "10_answer_generation",
+    "10_intent_coverage_rescue",
+    "11_answer_generation",
 )
 
 
@@ -73,10 +74,11 @@ class RunPaths:
     penalty_diagnostics: Path
     final_diagnostics: Path
     final_results: Path
+    rescue_results: Path
     generated_results: Path
 
 
-def make_paths(root: Path) -> RunPaths:
+def make_paths(root: Path, *, rescue_coverage_depth: int = 4) -> RunPaths:
     cache = root / "cache"
     artifacts = root / "artifacts"
     submissions = root / "submissions"
@@ -99,7 +101,14 @@ def make_paths(root: Path) -> RunPaths:
         penalty_diagnostics=submissions / "stage1_gemma_v4_penalty_cleanup" / "diagnostics.json",
         final_diagnostics=artifacts / "final_collective_diagnostics.json",
         final_results=submissions / "final_collective" / "results.json",
-        generated_results=submissions / "final_answers" / "results.json",
+        rescue_results=(
+            submissions
+            / f"best_final_enforcement_gate_rawintent_top1_rescue_depth{rescue_coverage_depth}"
+            / "results.json"
+        ),
+        generated_results=(
+            submissions / f"final_answers_rescue_depth{rescue_coverage_depth}" / "results.json"
+        ),
     )
 
 
@@ -420,6 +429,34 @@ def validate_generated_rows(
     return True, f"{len(expected_ids)} complete grounded answers"
 
 
+def validate_generation_stage(
+    results_path: Path,
+    metadata_path: Path,
+    expected_ids: set[str],
+    allowed_articles: set[str],
+) -> tuple[bool, str]:
+    ok, detail = validate_generated_rows(results_path, expected_ids, allowed_articles)
+    if not ok:
+        return ok, detail
+    if not metadata_path.exists():
+        return False, f"missing {metadata_path}"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return False, f"invalid generation metadata: {exc}"
+    if metadata.get("prompt_version") != PROMPT_VERSION:
+        return False, (
+            "generation prompt mismatch: "
+            f"{metadata.get('prompt_version')!r} != {PROMPT_VERSION!r}"
+        )
+    if metadata.get("row_count") != len(expected_ids):
+        return False, (
+            "generation metadata row count mismatch: "
+            f"{metadata.get('row_count')!r} != {len(expected_ids)}"
+        )
+    return True, detail
+
+
 def validate_generated_zip(
     path: Path,
     expected_ids: set[str],
@@ -691,6 +728,7 @@ def preflight(
                 "legal_rag/verification/deterministic_cleanup.py",
                 "legal_rag/verification/final_collective.py",
                 "legal_rag/verification/enforcement_gate.py",
+                "legal_rag/verification/intent_coverage_rescue.py",
                 "legal_rag/generation/prompt_builder.py",
                 "legal_rag/generation/llm_generator.py",
                 "legal_rag/generation/generate_answers.py",
@@ -807,6 +845,13 @@ def main() -> None:
     parser.add_argument("--retrieval-workers", type=int, default=20)
     parser.add_argument("--bge-workers", type=int, default=12)
     parser.add_argument("--llm-workers", type=int, default=12)
+    parser.add_argument(
+        "--rescue-coverage-depth",
+        type=int,
+        default=4,
+        choices=(2, 4),
+        help="Raw-intent coverage depth: 4 is best overall; 2 prioritizes article recall",
+    )
     parser.add_argument("--max-resume-passes", type=int, default=3)
     parser.add_argument("--preflight-only", action="store_true")
     parser.add_argument(
@@ -843,7 +888,10 @@ def main() -> None:
     input_path = (ROOT / args.input).resolve()
     corpus_path = (ROOT / args.corpus).resolve()
     bm25_path = (ROOT / args.bm25_index).resolve()
-    paths = make_paths((ROOT / args.run_dir).resolve())
+    paths = make_paths(
+        (ROOT / args.run_dir).resolve(),
+        rescue_coverage_depth=args.rescue_coverage_depth,
+    )
     for directory in (paths.root, paths.cache, paths.artifacts, paths.submissions, paths.logs):
         directory.mkdir(parents=True, exist_ok=True)
     acquire_run_lock(paths.root)
@@ -875,6 +923,7 @@ def main() -> None:
         "final_preserve_top1": False,
         "final_compact_candidates": True,
         "final_prompt_version": "gemma-precision-v5",
+        "rescue_coverage_depth": args.rescue_coverage_depth,
         "generation_prompt_version": PROMPT_VERSION,
         "generation_max_articles": 0,
         "generation_content_chars": 2400,
@@ -1285,9 +1334,41 @@ def main() -> None:
     if stop_if_requested("09_enforcement_role_gate", gate_dir / "submission.zip"):
         return
 
-    generation_dir = paths.submissions / "final_answers"
+    rescue_dir = paths.rescue_results.parent
+    run_deterministic_stage(
+        name="10_intent_coverage_rescue",
+        command=[
+            py,
+            "-m",
+            "legal_rag.verification.intent_coverage_rescue",
+            "--final-results",
+            str(gate_dir / "results.json"),
+            "--stage1-results",
+            str(paths.submissions / "stage1_gemma_v4_penalty_cleanup" / "results.json"),
+            "--intent-results",
+            str(paths.intent_ranked),
+            "--coverage-depth",
+            str(args.rescue_coverage_depth),
+            "--output-dir",
+            str(rescue_dir),
+        ],
+        validator=lambda: validate_question_rows(
+            paths.rescue_results,
+            expected_ids,
+            require_articles=True,
+            allowed_articles=allowed_articles,
+        ),
+        log_path=paths.logs / "10_intent_coverage_rescue.log",
+        manifest=manifest,
+        manifest_path=paths.manifest,
+        errors_path=paths.errors,
+    )
+    if stop_if_requested("10_intent_coverage_rescue", rescue_dir / "submission.zip"):
+        return
+
+    generation_dir = paths.generated_results.parent
     run_resumable_stage(
-        name="10_answer_generation",
+        name="11_answer_generation",
         base_command=[
             py,
             "-m",
@@ -1295,11 +1376,11 @@ def main() -> None:
             "--config",
             str(config_path),
             "--input",
-            str(gate_dir / "results.json"),
+            str(paths.rescue_results),
             "--corpus",
             str(corpus_path),
             "--cache",
-            str(paths.cache / "answer_generation.jsonl"),
+            str(paths.cache / f"answer_generation_rescue_depth{args.rescue_coverage_depth}.jsonl"),
             "--output-dir",
             str(generation_dir),
             "--errors",
@@ -1308,18 +1389,19 @@ def main() -> None:
             str(args.llm_workers),
             "--strict-errors",
         ],
-        validator=lambda: validate_generated_rows(
+        validator=lambda: validate_generation_stage(
             paths.generated_results,
+            generation_dir / "generation_metadata.json",
             expected_ids,
             allowed_articles,
         ),
-        log_path=paths.logs / "10_answer_generation.log",
+        log_path=paths.logs / "11_answer_generation.log",
         max_passes=args.max_resume_passes,
         manifest=manifest,
         manifest_path=paths.manifest,
         errors_path=paths.errors,
     )
-    if stop_if_requested("10_answer_generation", generation_dir / "submission.zip"):
+    if stop_if_requested("11_answer_generation", generation_dir / "submission.zip"):
         return
 
     final_zip = generation_dir / "submission.zip"

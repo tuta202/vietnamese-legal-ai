@@ -4,7 +4,7 @@ from __future__ import annotations
 _MAX_ARTICLES = 0  # 0 means include every selected article.
 _CONTENT_MAX_CHARS = 2400
 _TOTAL_CONTENT_MAX_CHARS = 48000
-PROMPT_VERSION = "gemma3-grounded-answer-v3-structure-guard-t0"
+PROMPT_VERSION = "gemma3-grounded-answer-v5-single-citation-repair-t0"
 
 _SYSTEM_PROMPT = """\
 You answer Vietnamese legal questions from the supplied legal articles.
@@ -67,6 +67,49 @@ class PromptBuilder:
             content_max_chars=per_article_chars,
         )
         return {"system": _SYSTEM_PROMPT, "user": user_content}
+
+    def build_citation_repair_prompt(
+        self,
+        question: str,
+        articles: list[dict],
+        draft_answer: str,
+        validation_error: str,
+        allowed_citations: list[str],
+        max_articles: int = _MAX_ARTICLES,
+        content_max_chars: int = _CONTENT_MAX_CHARS,
+        total_content_max_chars: int = _TOTAL_CONTENT_MAX_CHARS,
+    ) -> dict[str, str]:
+        original = self.build_prompt(
+            question,
+            articles,
+            max_articles=max_articles,
+            content_max_chars=content_max_chars,
+            total_content_max_chars=total_content_max_chars,
+        )
+        citation_list = "\n".join(f"- {citation}" for citation in allowed_citations)
+        repair = f"""
+
+CITATION REPAIR
+The draft below contains an explicit article citation that is not supported by
+the supplied article headers.
+
+Validation error:
+{validation_error}
+
+Allowed article citations:
+{citation_list or "- No valid article citation metadata is available."}
+
+Draft answer:
+{draft_answer}
+
+Rewrite the complete answer in Vietnamese.
+- Preserve correct, supported conclusions.
+- Cite only article headers in the allowed list.
+- Do not replace an invalid citation with a guess.
+- Remove a claim if none of the supplied articles supports it.
+- Return only the repaired final answer.
+""".strip()
+        return {"system": original["system"], "user": f"{original['user']}\n\n{repair}"}
 
     def _build_user_content(
         self,

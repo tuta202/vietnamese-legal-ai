@@ -25,7 +25,8 @@ flowchart TD
     S1 --> CLEAN["Penalty-aware conservative cleanup"]
     CLEAN --> FINAL["Final collective compact: precision-oriented"]
     FINAL --> GATE["Enforcement-role gate"]
-    GATE --> GEN["Grounded answer generation"]
+    GATE --> RESCUE["Raw-intent top1 coverage rescue: depth 4 best / depth 2 recall"]
+    RESCUE --> GEN["Grounded answer generation"]
     GEN --> OUT["results.json + submission.zip"]
 ```
 
@@ -165,14 +166,7 @@ Stage 1.
 Gate hậu xử lý chỉ loại điều xử phạt/cưỡng chế khi vai trò đó rõ ràng không phù
 hợp câu hỏi. Đây là rule hẹp, không phải bộ lọc relevance tổng quát.
 
-## 8. Answer Generation
-
-Generation nhận toàn bộ article sau gate. Mỗi article dùng tối đa 2.400 ký tự;
-article dài lấy excerpt theo formatter hiện tại và tổng content budget là 48.000
-ký tự. Prompt yêu cầu câu trả lời tiếng Việt, grounded vào article đã chọn và
-không chuyển điều kiện/hệ quả giữa các khoản, điểm lân cận.
-
-## Best hiện tại: raw-intent top1 coverage rescue
+## 8. Raw-Intent Top1 Coverage Rescue
 
 Sau `09_enforcement_role_gate`, bản thử nghiệm tốt nhất hiện tại áp dụng một post-process
 deterministic để khôi phục coverage bị Final verifier loại quá tay. Bản này chưa được tích hợp
@@ -181,29 +175,50 @@ thành phase mặc định của pipeline.
 Với từng legal intent:
 
 1. Xét article raw-intent rank 1.
-2. Bỏ qua nếu final còn ít nhất một article thuộc raw-intent top 3 của intent đó.
+2. Bỏ qua nếu final còn ít nhất một article thuộc raw-intent top `coverage_depth` của intent đó.
 3. Chỉ rescue nếu article rank 1 đã sống sót qua Stage 1 và penalty cleanup.
 4. Giữ nguyên thứ tự final, append article rescue theo thứ tự intent và không thêm trùng.
 
-Kết quả trên leaderboard:
+Kết quả leaderboard xác nhận hai cấu hình tốt nhất:
 
-| Version | Precision | Recall | F2 xấp xỉ | Mean article |
-|---|---:|---:|---:|---:|
-| Enforcement-role gate | 0.4638 | 0.7210 | 0.6490 | 3.5340 |
-| Raw-intent top1 coverage rescue | **0.4788** | **0.7510** | **0.6743** | 3.6855 |
+| Version | Article P | Article R | Article F2 macro | Docs P | Docs R | Docs F2 macro | Mean article |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Depth 2, ưu tiên article recall | 0.4794 | **0.7577** | **0.6425** | 0.5223 | 0.7867 | 0.6864 | 3.7485 |
+| Depth 4, best tổng thể/production | **0.4805** | 0.7510 | 0.6411 | **0.5367** | 0.7867 | **0.6928** | 3.6515 |
 
-Post-process thay đổi 275/2.000 question và rescue 303 article. Artifact:
+Depth 4 là bản best mặc định vì cân bằng tốt nhất giữa article và document. Depth 2 được giữ
+làm biến thể ưu tiên article recall và Article F2. Depth 1 bị loại vì không tăng recall so với
+depth 2 nhưng làm precision giảm; depth 3 bị depth 4 áp đảo.
+
+Artifact:
 
 ```text
-submissions/best_final_enforcement_gate_rawintent_top1_rescue/submission.zip
-submissions/best_final_enforcement_gate_rawintent_top1_rescue/diagnostics.json
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth4/submission.zip
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth4/diagnostics.json
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth2/submission.zip
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth2/diagnostics.json
 ```
 
-Đây là bản best hiện tại của nhánh GPU. Audit thủ công vẫn phát hiện một số raw top1 nhiễu,
-vì vậy bước cải tiến tiếp theo là thử guard `raw-intent top1 ∩ BGE top3/top5 cùng intent` và
-duplicate cũ-mới chỉ khi có quan hệ thay thế đã được xác minh.
+Depth 4 thay đổi 212/2.000 question và rescue 235 article. Depth 2 thay đổi 382 question và
+rescue 429 article. Cả hai đều rebuild `relevant_docs` từ toàn bộ `relevant_articles`, nên không
+có trường hợp article được rescue nhưng thiếu document tương ứng.
 
-## 9. Phase Hiện Tại
+Đây là phase `10_intent_coverage_rescue` sau `09_enforcement_role_gate`. Pipeline mặc định dùng
+depth 4; có thể chọn depth 2 bằng `--rescue-coverage-depth 2`. Rescue luôn chạy trước answer
+generation để câu trả lời nhận đúng tập article cuối cùng.
+
+## 9. Answer Generation
+
+Generation nhận toàn bộ article sau gate và coverage rescue. Mỗi article dùng tối đa 2.400 ký tự;
+article dài lấy excerpt theo formatter hiện tại và tổng content budget là 48.000
+ký tự. Prompt yêu cầu câu trả lời tiếng Việt, grounded vào article đã chọn và
+không chuyển điều kiện/hệ quả giữa các khoản, điểm lân cận.
+
+Mỗi citation đầy đủ được chuẩn hóa và kiểm tra theo cặp `(Điều, law_id)` thuộc article đầu vào.
+Answer phải có ít nhất một citation đầy đủ hợp lệ; citation ghép sai điều-văn bản hoặc chỉ dẫn
+chiếu sang article không được cung cấp sẽ không được cache và question phải chạy lại.
+
+## 10. Phase Hiện Tại
 
 | Phase | Nội dung |
 |---|---|
@@ -216,9 +231,10 @@ duplicate cũ-mới chỉ khi có quan hệ thay thế đã được xác minh.
 | `07_penalty_cleanup` | Deterministic penalty cleanup |
 | `08_final_collective` | Gemma precision-oriented compact verifier |
 | `09_enforcement_role_gate` | Enforcement-role cleanup |
-| `10_answer_generation` | Grounded final answer |
+| `10_intent_coverage_rescue` | Raw-intent top1, depth 4 mặc định hoặc depth 2 ưu tiên recall |
+| `11_answer_generation` | Grounded final answer từ kết quả sau rescue |
 
-## 10. Resume Và Cache Safety
+## 11. Resume Và Cache Safety
 
 Mỗi phase phải đủ toàn bộ question mới được đánh dấu complete. Lỗi kỹ thuật hoặc
 JSON không hợp lệ không được chuyển thành kết quả fallback. Chạy lại cùng command

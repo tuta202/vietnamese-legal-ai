@@ -78,6 +78,31 @@ class LegalGenerator:
         )
         return self._chat_complete(prompt["system"], prompt["user"]).strip()
 
+    def repair_citations(
+        self,
+        question: str,
+        articles: list[dict],
+        draft_answer: str,
+        validation_error: str,
+        allowed_citations: list[str],
+    ) -> str:
+        """Repair one clearly unsupported citation using the same evidence."""
+        if self.mock:
+            return draft_answer
+
+        gen_cfg = self.config.generator
+        prompt = self._builder.build_citation_repair_prompt(
+            question,
+            articles,
+            draft_answer,
+            validation_error,
+            allowed_citations,
+            max_articles=gen_cfg.max_articles,
+            content_max_chars=gen_cfg.content_max_chars,
+            total_content_max_chars=gen_cfg.total_content_max_chars,
+        )
+        return self._chat_complete(prompt["system"], prompt["user"]).strip()
+
     # ------------------------------------------------------------------
     # Model-call hook — overridden by Vertex subclass (only this differs)
     # ------------------------------------------------------------------

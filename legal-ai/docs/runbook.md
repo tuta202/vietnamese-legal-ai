@@ -209,8 +209,31 @@ Preflight không chạy pipeline 2.000 câu.
   --retrieval-workers 20 `
   --bge-workers 12 `
   --llm-workers 12 `
+  --rescue-coverage-depth 4 `
   --max-resume-passes 5
 ```
+
+Lệnh trên chạy bản production depth 4 từ đầu đến Answer Generation. Để chạy
+biến thể depth 2 trong một run độc lập, dùng `--run-dir` khác để cache và output
+không ghi đè nhau:
+
+```powershell
+.\.venv\Scripts\python.exe run_best_pipeline.py `
+  --config config_gpu_clean.yaml `
+  --input ..\R2AIStage1DATA.json `
+  --corpus corpus\data\corpus_clean_asof_20260301.json `
+  --bm25-index retrieval\data\bm25_index_asof_20260301.pkl `
+  --run-dir outputs\runs\gpu_asof_20260301_depth2 `
+  --analysis-workers 12 `
+  --retrieval-workers 20 `
+  --bge-workers 12 `
+  --llm-workers 12 `
+  --rescue-coverage-depth 2 `
+  --max-resume-passes 5
+```
+
+Chạy lại nguyên lệnh với cùng `--run-dir` để resume. Không thêm `--force` và
+không đổi depth giữa chừng trong cùng một run.
 
 Pipeline xử lý xong toàn bộ question của một phase rồi mới chuyển sang phase kế
 tiếp. Worker được tách theo loại workload:
@@ -232,7 +255,8 @@ tiếp. Worker được tách theo loại workload:
 07_penalty_cleanup
 08_final_collective
 09_enforcement_role_gate
-10_answer_generation
+10_intent_coverage_rescue
+11_answer_generation
 ```
 
 Chi tiết:
@@ -248,17 +272,31 @@ Chi tiết:
 | `07_penalty_cleanup` | Conservative penalty-aware cleanup | `submissions/stage1_gemma_v4_penalty_cleanup/submission.zip` |
 | `08_final_collective` | Gemma precision-oriented, compact, content 2.200 | `submissions/final_collective/submission.zip` |
 | `09_enforcement_role_gate` | Loại điều xử phạt/cưỡng chế sai vai trò | `submissions/best_final_enforcement_gate/submission.zip` |
-| `10_answer_generation` | Sinh answer grounded | `submissions/final_answers/submission.zip` |
+| `10_intent_coverage_rescue` | Rescue raw-intent top1; depth 4 mặc định | `submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth4/submission.zip` |
+| `11_answer_generation` | Sinh answer grounded từ article sau rescue | `submissions/final_answers_rescue_depth4/submission.zip` |
 
 Bản leaderboard tốt nhất hiện tại của run GPU benchmark là post-process thử nghiệm sau phase 09:
 
 ```text
-submissions/best_final_enforcement_gate_rawintent_top1_rescue/submission.zip
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth4/submission.zip
 ```
 
-Điểm leaderboard: `ARTICLES_PRECISION=0.4788`, `ARTICLES_RECALL=0.7510`, F2 xấp xỉ
-`0.6743`. Bản này rescue raw-intent top1 khi final không còn coverage trong raw-intent top3;
-nó chưa phải phase mặc định của `run_best_pipeline.py`.
+Depth 4 là bản production/best tổng thể:
+
+- `ARTICLES_PRECISION=0.4805`, `ARTICLES_RECALL=0.7510`, `ARTICLES_F2MACRO=0.6411`;
+- `DOCS_PRECISION=0.5367`, `DOCS_RECALL=0.7867`, `DOCS_F2MACRO=0.6928`;
+- mean `3.6515` article/câu.
+
+Bản thứ hai ưu tiên article recall là:
+
+```text
+submissions/best_final_enforcement_gate_rawintent_top1_rescue_depth2/submission.zip
+```
+
+Depth 2 đạt `ARTICLES_PRECISION=0.4794`, `ARTICLES_RECALL=0.7577`,
+`ARTICLES_F2MACRO=0.6425`; mean `3.7485` article/câu. Hai cấu hình rescue raw-intent top1
+khi final không còn coverage trong raw-intent top 4 hoặc top 2 tương ứng. Đây là phase 10
+chính thức của `run_best_pipeline.py`; depth 4 là mặc định.
 
 Prompt hiện tại:
 
@@ -268,6 +306,41 @@ Prompt hiện tại:
 - lỗi request/parse trong strict mode không được cache thành fallback.
 
 ## 10. Chạy Đến Một Phase
+
+### Chạy riêng Answer Generation từ kết quả rescue hiện có
+
+Depth 4:
+
+```powershell
+.\.venv\Scripts\python.exe -m legal_rag.generation.generate_answers `
+  --config config_gpu_clean.yaml `
+  --input outputs\runs\gpu_phase_benchmark\submissions\best_final_enforcement_gate_rawintent_top1_rescue_depth4\results.json `
+  --corpus corpus\data\corpus_clean_asof_20260301.json `
+  --cache outputs\runs\gpu_phase_benchmark\cache\answer_generation_rescue_depth4.jsonl `
+  --output-dir outputs\runs\gpu_phase_benchmark\submissions\final_answers_rescue_depth4 `
+  --errors outputs\runs\gpu_phase_benchmark\artifacts\answer_generation_depth4_errors.json `
+  --workers 12 `
+  --resume `
+  --strict-errors
+```
+
+Depth 2:
+
+```powershell
+.\.venv\Scripts\python.exe -m legal_rag.generation.generate_answers `
+  --config config_gpu_clean.yaml `
+  --input outputs\runs\gpu_phase_benchmark\submissions\best_final_enforcement_gate_rawintent_top1_rescue_depth2\results.json `
+  --corpus corpus\data\corpus_clean_asof_20260301.json `
+  --cache outputs\runs\gpu_phase_benchmark\cache\answer_generation_rescue_depth2.jsonl `
+  --output-dir outputs\runs\gpu_phase_benchmark\submissions\final_answers_rescue_depth2 `
+  --errors outputs\runs\gpu_phase_benchmark\artifacts\answer_generation_depth2_errors.json `
+  --workers 12 `
+  --resume `
+  --strict-errors
+```
+
+Nếu request gặp lỗi kỹ thuật, chạy lại đúng lệnh tương ứng. Những câu đã có
+cache hợp lệ sẽ được bỏ qua; câu lỗi hoặc chưa chạy sẽ được xử lý lại.
 
 Liệt kê phase hợp lệ:
 
@@ -354,7 +427,8 @@ intent_ranked_hits.jsonl
 bge_intent_scores.jsonl
 stage1_gemma_compact_v4.jsonl
 final_collective_gemma_v5.jsonl
-answer_generation.jsonl
+answer_generation_rescue_depth4.jsonl
+# hoặc answer_generation_rescue_depth2.jsonl
 ```
 
 Nguyên tắc:
@@ -380,12 +454,12 @@ outputs/runs/<run-name>/
 Submission cuối:
 
 ```text
-outputs/runs/<run-name>/submissions/final_answers/results.json
-outputs/runs/<run-name>/submissions/final_answers/submission.zip
+outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/results.json
+outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/submission.zip
 ```
 
-Submission phase 02-09 có `answer` rỗng và dùng để đo article retrieval. Phase
-10 chứa cả article IDs và câu trả lời cuối.
+Submission phase 02-10 có `answer` rỗng và dùng để đo article retrieval. Phase
+11 chứa article IDs và câu trả lời cuối.
 
 ## 14. Checklist Trước Full Run
 
