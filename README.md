@@ -216,6 +216,10 @@ Nếu có question lỗi do network, GPU hoặc endpoint tạm thời, chạy l�
 full ở trên với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
 tiếp tục xử lý phần còn thiếu cho đến khi tạo được bản submission cuối cùng.
 
+Nếu process bị dừng với lỗi `KeyboardInterrupt` (ví dụ terminal, IDE hoặc task
+runner gửi tín hiệu ngắt trong lúc chương trình đang chờ worker), cũng xử lý theo
+cách trên: chạy lại nguyên command full với cùng `--run-dir`. Pipeline sẽ bỏ qua các phase/question đã có cache hợp lệ, chỉ chạy lại phần còn thiếu rồi tạo submission khi đủ kết quả.
+
 ## 10. Resume pipeline
 
 Để resume, chạy lại chính xác command full với cùng:
