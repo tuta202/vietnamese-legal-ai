@@ -214,7 +214,7 @@ tiếp. Mỗi loại workload có worker riêng để phù hợp endpoint tươn
 
 Nếu có question lỗi do network, GPU hoặc endpoint tạm thời, chạy lại đúng command
 full ở trên với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
-tiếp tục xử lý phần còn thiếu.
+tiếp tục xử lý phần còn thiếu cho đến khi tạo được bản submission cuối cùng.
 
 ## 10. Resume pipeline
 
