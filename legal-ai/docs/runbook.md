@@ -178,7 +178,9 @@ Preflight không chạy 2.000 câu.
   --max-resume-passes 5
 ```
 
-Nếu muốn chạy biến thể depth 2, chỉ đổi `--run-dir` và `--rescue-coverage-depth 2`.
+Nếu có question lỗi do network, GPU hoặc endpoint tạm thời, chạy lại đúng command
+cũ với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
+tiếp tục phần còn thiếu.
 
 ## 9. Resume
 
@@ -190,7 +192,13 @@ Chạy lại đúng command full với cùng:
 - `--bm25-index`
 - `--config`
 
+Nếu có question lỗi do network, GPU hoặc endpoint tạm thời thì cũng chỉ cần
+chạy lại đúng command cũ với cùng `--run-dir`. Không cần sửa cache thủ công;
+pipeline sẽ resume phần chưa xong.
+
 Nếu chỉ endpoint đổi sau redeploy, thêm:
+
+---
 
 ```text
 --accept-runtime-change

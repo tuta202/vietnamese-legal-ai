@@ -177,64 +177,7 @@ Collection mặc định:
 legal_vn_qwen3_asof_20260301_v1
 ```
 
-## 8. Build BM25
-
-Chạy trong thư mục `legal-ai`:
-
-```powershell
-$env:PYTHONIOENCODING="utf-8"
-
-.\.venv\Scripts\python.exe build_core_bm25.py `
-  --corpus corpus\data\corpus_clean_asof_20260301.json `
-  --output retrieval\data\bm25_index_asof_20260301.pkl `
-  --expected-count 82570
-```
-
-Output:
-
-```text
-retrieval/data/bm25_index_asof_20260301.pkl
-```
-
-## 9. Build Qdrant collection
-
-Kiểm tra endpoint và Qdrant trước:
-
-```powershell
-.\.venv\Scripts\python.exe setup_qdrant_cloud.py `
-  --config config_gpu_clean.yaml `
-  --corpus corpus\data\corpus_clean_asof_20260301.json `
-  --test-only
-```
-
-Build collection mới từ đầu:
-
-```powershell
-.\.venv\Scripts\python.exe setup_qdrant_cloud.py `
-  --config config_gpu_clean.yaml `
-  --corpus corpus\data\corpus_clean_asof_20260301.json `
-  --workers 10 `
-  --max-resume-passes 5 `
-  --force
-```
-
-`--force` xóa và tạo lại đúng collection khai báo trong config. Chỉ sử dụng khi
-chắc chắn collection name không trỏ vào dữ liệu cần giữ.
-
-Resume build sau khi dừng:
-
-```powershell
-.\.venv\Scripts\python.exe setup_qdrant_cloud.py `
-  --config config_gpu_clean.yaml `
-  --corpus corpus\data\corpus_clean_asof_20260301.json `
-  --workers 10 `
-  --max-resume-passes 5
-```
-
-Khi resume, không truyền `--force`. Script kiểm tra metadata/hash của point,
-retry batch lỗi và chỉ hoàn thành khi count cùng toàn bộ expected IDs hợp lệ.
-
-## 10. Preflight
+## 8. Preflight
 
 ```powershell
 .\.venv\Scripts\python.exe run_best_pipeline.py `
@@ -249,7 +192,7 @@ retry batch lỗi và chỉ hoàn thành khi count cùng toàn bộ expected IDs
 Preflight xác nhận input IDs, corpus, BM25, Qdrant collection, vector schema,
 embedding fingerprint, config và endpoint trước khi xử lý 2.000 câu.
 
-## 11. Chạy full pipeline
+## 9. Chạy full pipeline
 
 ```powershell
 .\.venv\Scripts\python.exe run_best_pipeline.py `
@@ -268,7 +211,11 @@ embedding fingerprint, config và endpoint trước khi xử lý 2.000 câu.
 Pipeline chạy hết 2.000 question của một phase trước khi chuyển sang phase kế
 tiếp. Mỗi loại workload có worker riêng để phù hợp endpoint tương ứng.
 
-## 12. Resume pipeline
+Nếu có question lỗi do network, GPU hoặc endpoint tạm thời, chạy lại đúng command
+full với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
+tiếp tục xử lý phần còn thiếu.
+
+## 10. Resume pipeline
 
 Để resume, chạy lại chính xác command full với cùng:
 
@@ -278,7 +225,9 @@ tiếp. Mỗi loại workload có worker riêng để phù hợp endpoint tươn
 - `--bm25-index`;
 - `--config`.
 
-Nếu chỉ endpoint ID/DNS thay đổi sau redeploy, thêm:
+Nếu endpoint ID/DNS thay đổi sau redeploy, thêm:
+
+---
 
 ```text
 --accept-runtime-change
@@ -287,7 +236,11 @@ Nếu chỉ endpoint ID/DNS thay đổi sau redeploy, thêm:
 Chỉ dùng các flag chấp nhận thay đổi khi hiểu rõ thay đổi đó. Fingerprint vẫn
 không cho phép âm thầm thay input, corpus hoặc BM25 của một run đang có cache.
 
-## 14. Kết quả
+Nếu có question lỗi do network, GPU hoặc endpoint tạm thời thì cũng chỉ cần
+chạy lại đúng command cũ với cùng `--run-dir`. Không cần sửa cache thủ công;
+pipeline sẽ resume phần chưa xong.
+
+## 11. Kết quả
 
 Một run có cấu trúc:
 
@@ -308,7 +261,7 @@ outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/results.json
 outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/submission.zip
 ```
 
-## 15. Checklist tái hiện
+## 12. Checklist tái hiện
 
 1. Python 3.14.3 và `requirements.txt` đã được cài.
 2. Ba GPU endpoint hoạt động và `.env` chứa đúng ID/DNS.
