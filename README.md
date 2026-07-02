@@ -205,6 +205,7 @@ embedding fingerprint, config và endpoint trước khi xử lý 2.000 câu.
   --retrieval-workers 20 `
   --bge-workers 12 `
   --llm-workers 12 `
+  --rescue-coverage-depth 4 `
   --max-resume-passes 5
 ```
 

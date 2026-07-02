@@ -168,9 +168,9 @@ hợp câu hỏi. Đây là rule hẹp, không phải bộ lọc relevance tổn
 
 ## 8. Raw-Intent Top1 Coverage Rescue
 
-Sau `09_enforcement_role_gate`, bản thử nghiệm tốt nhất hiện tại áp dụng một post-process
-deterministic để khôi phục coverage bị Final verifier loại quá tay. Bản này chưa được tích hợp
-thành phase mặc định của pipeline.
+Sau `09_enforcement_role_gate`, pipeline áp dụng một post-process deterministic để khôi phục
+coverage bị Final verifier loại quá tay. Đây là phase `10_intent_coverage_rescue` và được tích
+hợp mặc định trong full pipeline.
 
 Với từng legal intent:
 
@@ -215,8 +215,11 @@ ký tự. Prompt yêu cầu câu trả lời tiếng Việt, grounded vào artic
 không chuyển điều kiện/hệ quả giữa các khoản, điểm lân cận.
 
 Mỗi citation đầy đủ được chuẩn hóa và kiểm tra theo cặp `(Điều, law_id)` thuộc article đầu vào.
-Answer phải có ít nhất một citation đầy đủ hợp lệ; citation ghép sai điều-văn bản hoặc chỉ dẫn
-chiếu sang article không được cung cấp sẽ không được cache và question phải chạy lại.
+Hệ thống chỉ gọi repair một lần khi phát hiện citation hallucination rõ ràng: answer dẫn trực tiếp
+một cặp điều-văn bản không có trong evidence đầu vào và không thể giải thích bằng cross-reference
+hoặc metadata của evidence. Kết quả repair được chấp nhận và ghi cache; validator chỉ ghi cảnh báo,
+không chặn `results.json`. Nếu request lỗi hoặc repair trả response rỗng, question không được cache
+và sẽ được xử lý lại khi resume.
 
 ## 10. Phase Hiện Tại
 

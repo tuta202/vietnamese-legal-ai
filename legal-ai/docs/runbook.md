@@ -63,7 +63,8 @@ GPU_BGE_DNS=<bge-dedicated-domain>
 Ghi chú:
 
 - Nếu chạy Qdrant local, có thể để `QDRANT_API_KEY=` trống.
-- Nếu endpoint không có dedicated domain, để biến DNS trống theo adapter đang dùng.
+- Workflow GPU hiện tại dùng dedicated endpoint; điền đầy đủ `GPU_EMBED_DNS`, `GPU_LLM_DNS` và
+  `GPU_BGE_DNS` theo thông tin triển khai model, không để trống.
 - Endpoint ID, DNS, project và region phải khớp `config_gpu_clean.yaml`.
 
 ## 4. Corpus Và Input
