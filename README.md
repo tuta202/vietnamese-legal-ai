@@ -11,9 +11,9 @@ Các model của workflow:
 
 Tài liệu chi tiết:
 
-- [Runbook](legal-ai/docs/runbook.md)
 - [RAG workflow](legal-ai/docs/rag-workflow.md)
 - [Source layout](legal-ai/docs/source-layout.md)
+- [Runbook](legal-ai/docs/runbook.md)
 
 Tài liệu Google Docs riêng của bạn giữ vai trò hướng dẫn vận hành endpoint và điền biến môi trường: [Google Docs](https://docs.google.com/document/d/1FYd9rO_qy03swiO8t4tKvpDRzpNqe9CbGl67_Th_-JQ/edit?usp=sharing).
 
@@ -82,6 +82,17 @@ python -m pip install -r requirements.txt
 ```
 
 ## 4. Dữ liệu
+
+Nếu muốn dùng bộ dữ liệu đã chuẩn bị sẵn để tiết kiệm thời gian build lại,
+hãy tải tại:
+
+[Google Drive bundle](https://drive.google.com/drive/folders/1RhGcsvwtEGA3_wCehafKeV0Om_4dRLUX?usp=drive_link)
+
+Gói dữ liệu đã bao gồm:
+
+- `corpus_clean_asof_20260301.json`: corpus pháp luật đã làm sạch và lọc hiệu lực tại ngày `01/03/2026`.
+- `bm25_index_asof_20260301.pkl`: BM25 index đã được build sẵn từ corpus trên.
+- Qdrant snapshot: snapshot của vector collection đã được build từ cùng corpus.
 
 Corpus:
 
