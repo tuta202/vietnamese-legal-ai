@@ -94,6 +94,14 @@ Gói dữ liệu đã bao gồm:
 - `bm25_index_asof_20260301.pkl`: BM25 index đã được build sẵn từ corpus trên.
 - Qdrant snapshot: snapshot của vector collection đã được build từ cùng corpus.
 
+Sau khi tải về, đặt file vào đúng thư mục được dùng trong command:
+
+- corpus: `legal-ai/corpus/data/corpus_clean_asof_20260301.json`
+- BM25: `legal-ai/retrieval/data/bm25_index_asof_20260301.pkl`
+- Qdrant snapshot: vào Qdrant local để upload snapshot và đặt đúng tên collection như trong `config_gpu_clean.yaml`
+
+Nếu đã có đủ ba file này thì không cần build lại corpus, BM25 hay Qdrant collection từ đầu.
+
 Corpus:
 
 ```text
