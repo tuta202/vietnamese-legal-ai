@@ -14,7 +14,7 @@ Workflow chỉ sử dụng:
 ```powershell
 cd C:\development\vietnamese-legal-ai\legal-ai
 
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -73,6 +73,7 @@ Lưu ý:
 - Endpoint ID, DNS, project và region phải khớp `config_gpu_clean.yaml`.
 - Nếu dùng Qdrant local, đặt `QDRANT_URL=http://localhost:6333` và có thể để API
   key trống.
+- Nếu chạy local hoàn toàn, để `QDRANT_API_KEY=` trống là được.
 
 ## 4. Corpus Chuẩn
 

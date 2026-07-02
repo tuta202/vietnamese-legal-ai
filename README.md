@@ -17,7 +17,7 @@ Tài liệu chi tiết:
 
 ## 1. Workflow
 
-Pipeline xử lý article-level theo thứ tự:
+Pipeline xử lý theo thứ tự:
 
 1. Gemma rewrite câu hỏi.
 2. Gemma decompose các legal intent độc lập.
@@ -31,9 +31,6 @@ Pipeline xử lý article-level theo thứ tự:
 10. Raw-intent top1 coverage rescue để bổ sung căn cứ còn thiếu theo legal intent.
 11. Gemma sinh câu trả lời grounded từ các article cuối cùng.
 12. Đóng gói `results.json` và `submission.zip`.
-
-Request lỗi hoặc output không parse được không bị thay bằng fallback kỹ thuật.
-Question lỗi được để lại và chạy lại bằng cơ chế resume.
 
 ## 2. Cấu trúc mã nguồn
 
@@ -66,7 +63,7 @@ legal-ai/
 Môi trường tham chiếu:
 
 - Windows PowerShell;
-- Python 3.11;
+- Python 3.14.3;
 - Google Cloud CLI để xác thực các GPU endpoint hiện tại;
 - Qdrant Cloud hoặc Qdrant server tương thích API;
 - ba model GPU đã deploy và truy cập được qua endpoint.
@@ -76,7 +73,7 @@ Cài dependency:
 ```powershell
 cd C:\development\vietnamese-legal-ai\legal-ai
 
-py -3.11 -m venv .venv
+py -3.14 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
@@ -96,29 +93,6 @@ Tập câu hỏi mẫu trong các command:
 R2AIStage1DATA.json
 ```
 
-## 5. Model và endpoint
-
-Repo không đóng gói checkpoint. Điền URL và revision/checkpoint chính xác của
-các model được bàn giao, sau đó deploy trước khi chạy pipeline:
-
-| Vai trò | Model | URL checkpoint | Revision/commit |
-|---|---|---|---|
-| Embedding | `Qwen3-Embedding-8B` | `<QWEN3_EMBEDDING_CHECKPOINT_URL>` | `<QWEN3_EMBEDDING_REVISION>` |
-| LLM | `google/gemma-3-12b-it` | `<GEMMA3_12B_IT_CHECKPOINT_URL>` | `<GEMMA3_12B_IT_REVISION>` |
-| Reranker | `BAAI/bge-reranker-v2-m3` | `<BGE_RERANKER_CHECKPOINT_URL>` | `<BGE_RERANKER_REVISION>` |
-
-Thông tin triển khai endpoint do đơn vị vận hành cung cấp:
-
-```text
-Embedding endpoint/deployment guide: <EMBEDDING_DEPLOYMENT_GUIDE_URL>
-LLM endpoint/deployment guide:       <LLM_DEPLOYMENT_GUIDE_URL>
-BGE endpoint/deployment guide:       <BGE_DEPLOYMENT_GUIDE_URL>
-```
-
-`Qwen3-Embedding-8B` phải trả vector 4096 chiều. Endpoint LLM phải hỗ trợ
-chat completion; endpoint embedding và BGE phải tương thích adapter trong
-`legal_rag/backends/gpu.py`.
-
 ## 6. Biến môi trường
 
 Tạo `.env` từ template:
@@ -132,7 +106,11 @@ Các biến bắt buộc:
 ```dotenv
 QDRANT_URL=https://<your-cluster>.cloud.qdrant.io
 QDRANT_API_KEY=<your-qdrant-api-key>
+```
 
+Nếu chạy Qdrant local (`http://localhost:6333`), có thể để `QDRANT_API_KEY` trống.
+
+```dotenv
 GCP_PROJECT=<your-project-id>
 
 GPU_EMBED_ENDPOINT_ID=<qwen-embedding-endpoint-id>
@@ -285,42 +263,8 @@ Nếu chỉ endpoint ID/DNS thay đổi sau redeploy, thêm:
 --accept-runtime-change
 ```
 
-Nếu chủ động resume sau khi sửa code hoặc workflow:
-
-```text
---accept-code-change --accept-workflow-change
-```
-
 Chỉ dùng các flag chấp nhận thay đổi khi hiểu rõ thay đổi đó. Fingerprint vẫn
 không cho phép âm thầm thay input, corpus hoặc BM25 của một run đang có cache.
-
-## 13. Chạy từng phase
-
-Liệt kê phase:
-
-```powershell
-.\.venv\Scripts\python.exe run_best_pipeline.py --list-stages
-```
-
-Ví dụ chạy đến Global RRF:
-
-```powershell
-.\.venv\Scripts\python.exe run_best_pipeline.py `
-  --config config_gpu_clean.yaml `
-  --input ..\R2AIStage1DATA.json `
-  --corpus corpus\data\corpus_clean_asof_20260301.json `
-  --bm25-index retrieval\data\bm25_index_asof_20260301.pkl `
-  --run-dir outputs\runs\gpu_phase_benchmark `
-  --analysis-workers 12 `
-  --retrieval-workers 20 `
-  --bge-workers 12 `
-  --llm-workers 12 `
-  --max-resume-passes 5 `
-  --stop-after-stage 02_global_rrf
-```
-
-Giữ nguyên command và `--run-dir`, sau đó đổi `--stop-after-stage` để chạy tiếp.
-Mỗi phase article-selection tạo submission trung gian để benchmark leaderboard.
 
 ## 14. Kết quả
 
@@ -349,9 +293,7 @@ outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/submission.zip
 2. Ba GPU endpoint hoạt động và `.env` chứa đúng ID/DNS.
 3. Application Default Credentials còn hiệu lực.
 4. Corpus clean tồn tại và có đúng số article dự kiến.
-5. BM25 được build từ chính corpus đó.
+5. File .pkl BM25 
 6. Qdrant collection được build bằng Qwen3-Embedding-8B, dimension 4096.
 7. `--preflight-only` thành công.
 8. Full run dùng một `--run-dir` riêng.
-9. Không đổi input/corpus/BM25/config giữa các lần resume.
-10. Kiểm tra đủ question IDs và không có technical fallback trước khi nộp.
