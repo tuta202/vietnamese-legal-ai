@@ -213,7 +213,7 @@ Pipeline chạy hết 2.000 question của một phase trước khi chuyển san
 tiếp. Mỗi loại workload có worker riêng để phù hợp endpoint tương ứng.
 
 Nếu có question lỗi do network, GPU hoặc endpoint tạm thời, chạy lại đúng command
-full với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
+full ở trên với cùng `--run-dir`; pipeline sẽ tự bỏ qua question đã có cache hợp lệ và
 tiếp tục xử lý phần còn thiếu.
 
 ## 10. Resume pipeline
@@ -226,9 +226,9 @@ tiếp tục xử lý phần còn thiếu.
 - `--bm25-index`;
 - `--config`.
 
-Nếu endpoint ID/DNS thay đổi sau redeploy, thêm:
-
 ---
+
+Nếu endpoint ID/DNS thay đổi sau redeploy, thêm:
 
 ```text
 --accept-runtime-change
