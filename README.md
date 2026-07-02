@@ -28,8 +28,9 @@ Pipeline xử lý article-level theo thứ tự:
 7. Penalty-aware deterministic cleanup.
 8. Final collective compact verifier ưu tiên precision.
 9. Enforcement-role gate.
-10. Gemma sinh câu trả lời grounded từ các article cuối cùng.
-11. Đóng gói `results.json` và `submission.zip`.
+10. Raw-intent top1 coverage rescue để bổ sung căn cứ còn thiếu theo legal intent.
+11. Gemma sinh câu trả lời grounded từ các article cuối cùng.
+12. Đóng gói `results.json` và `submission.zip`.
 
 Request lỗi hoặc output không parse được không bị thay bằng fallback kỹ thuật.
 Question lỗi được để lại và chạy lại bằng cơ chế resume.
@@ -97,13 +98,22 @@ R2AIStage1DATA.json
 
 ## 5. Model và endpoint
 
-Repo không đóng gói checkpoint. Cần deploy trước:
+Repo không đóng gói checkpoint. Điền URL và revision/checkpoint chính xác của
+các model được bàn giao, sau đó deploy trước khi chạy pipeline:
 
-| Vai trò | Model |
-|---|---|
-| Embedding | `Qwen3-Embedding-8B` |
-| LLM | `google/gemma-3-12b-it` |
-| Reranker | `BAAI/bge-reranker-v2-m3` |
+| Vai trò | Model | URL checkpoint | Revision/commit |
+|---|---|---|---|
+| Embedding | `Qwen3-Embedding-8B` | `<QWEN3_EMBEDDING_CHECKPOINT_URL>` | `<QWEN3_EMBEDDING_REVISION>` |
+| LLM | `google/gemma-3-12b-it` | `<GEMMA3_12B_IT_CHECKPOINT_URL>` | `<GEMMA3_12B_IT_REVISION>` |
+| Reranker | `BAAI/bge-reranker-v2-m3` | `<BGE_RERANKER_CHECKPOINT_URL>` | `<BGE_RERANKER_REVISION>` |
+
+Thông tin triển khai endpoint do đơn vị vận hành cung cấp:
+
+```text
+Embedding endpoint/deployment guide: <EMBEDDING_DEPLOYMENT_GUIDE_URL>
+LLM endpoint/deployment guide:       <LLM_DEPLOYMENT_GUIDE_URL>
+BGE endpoint/deployment guide:       <BGE_DEPLOYMENT_GUIDE_URL>
+```
 
 `Qwen3-Embedding-8B` phải trả vector 4096 chiều. Endpoint LLM phải hỗ trợ
 chat completion; endpoint embedding và BGE phải tương thích adapter trong

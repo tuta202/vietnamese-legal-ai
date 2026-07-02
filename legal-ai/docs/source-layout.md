@@ -6,7 +6,7 @@ The repository separates executable source code from runtime data and generated 
 legal-ai/
 ├── legal_rag/
 │   ├── common/          shared paths, Qdrant factory, retries, article lookup
-│   ├── backends/        Vertex/Gemini, GPU/Qwen-Gemma, shared BGE adapters
+│   ├── backends/        GPU/Qwen-Gemma and BGE endpoint adapters
 │   ├── generation/      answer prompt and generator
 │   ├── retrieval/       query analysis, global RRF, per-intent RRF
 │   ├── ranking/         intent-wise BGE and tiered candidate union
@@ -21,8 +21,7 @@ legal-ai/
 ├── outputs/             run artifacts, diagnostics, logs, submissions
 ├── tests/               all automated tests
 ├── docs/                workflow and maintenance documentation
-├── config_gpu_clean.yaml
-└── config_vertex_clean.yaml
+└── config_gpu_clean.yaml
 ```
 
 ## Public Commands
@@ -30,10 +29,10 @@ legal-ai/
 The root scripts are compatibility wrappers. Existing commands remain stable:
 
 ```powershell
-.\.venv\Scripts\python.exe run_best_pipeline.py --config config_vertex_clean.yaml ...
+.\.venv\Scripts\python.exe run_best_pipeline.py --config config_gpu_clean.yaml ...
 .\.venv\Scripts\python.exe setup_qdrant_cloud.py --config config_gpu_clean.yaml ...
 .\.venv\Scripts\python.exe build_core_bm25.py ...
-.\.venv\Scripts\python.exe pipeline.py --config config_vertex_clean.yaml ...
+.\.venv\Scripts\python.exe pipeline.py --config config_gpu_clean.yaml ...
 ```
 
 Internal stages are package modules and are normally invoked by the orchestrator:
@@ -48,6 +47,7 @@ legal_rag.verification.candidate_verifier
 legal_rag.verification.deterministic_cleanup
 legal_rag.verification.final_collective
 legal_rag.verification.enforcement_gate
+legal_rag.verification.intent_coverage_rescue
 legal_rag.generation.generate_answers
 legal_rag.output.phase_snapshot
 ```
