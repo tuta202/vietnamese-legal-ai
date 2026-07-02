@@ -15,6 +15,8 @@ Tài liệu chi tiết:
 - [RAG workflow](legal-ai/docs/rag-workflow.md)
 - [Source layout](legal-ai/docs/source-layout.md)
 
+Tài liệu Google Docs riêng của bạn giữ vai trò hướng dẫn vận hành endpoint và điền biến môi trường: [Google Docs](https://docs.google.com/document/d/1FYd9rO_qy03swiO8t4tKvpDRzpNqe9CbGl67_Th_-JQ/edit?usp=sharing).
+
 ## 1. Workflow
 
 Pipeline xử lý theo thứ tự:
@@ -289,11 +291,11 @@ outputs/runs/<run-name>/submissions/final_answers_rescue_depth4/submission.zip
 
 ## 15. Checklist tái hiện
 
-1. Python 3.11 và `requirements.txt` đã được cài.
+1. Python 3.14.3 và `requirements.txt` đã được cài.
 2. Ba GPU endpoint hoạt động và `.env` chứa đúng ID/DNS.
 3. Application Default Credentials còn hiệu lực.
 4. Corpus clean tồn tại và có đúng số article dự kiến.
-5. File .pkl BM25 
+5. File `.pkl` BM25 được build từ đúng corpus.
 6. Qdrant collection được build bằng Qwen3-Embedding-8B, dimension 4096.
 7. `--preflight-only` thành công.
 8. Full run dùng một `--run-dir` riêng.
