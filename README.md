@@ -83,7 +83,7 @@ python -m pip install -r requirements.txt
 
 ## 4. Dữ liệu
 
-Nếu muốn dùng bộ dữ liệu đã chuẩn bị sẵn để tiết kiệm thời gian build lại,
+Dùng bộ dữ liệu đã chuẩn bị sẵn để đỡ tốn thời gian build lại BM25 + Qdrant Collection,
 hãy tải tại:
 
 [Google Drive bundle](https://drive.google.com/drive/folders/1RhGcsvwtEGA3_wCehafKeV0Om_4dRLUX?usp=drive_link)
