@@ -65,6 +65,18 @@ def feature_chip(icon: str, text: str) -> rx.Component:
 
 def hero_header() -> rx.Component:
     return rx.hstack(
+        rx.box(
+            rx.icon("scale", size=26, color="white"),
+            width="48px",
+            height="48px",
+            display="flex",
+            align_items="center",
+            justify_content="center",
+            border_radius="8px",
+            background=f"linear-gradient(135deg, {TEAL}, {TEAL_LIGHT})",
+            box_shadow="0 16px 34px rgba(79, 70, 229, 0.24)",
+            flex_shrink="0",
+        ),
         rx.vstack(
             rx.heading(
                 "Trợ lý pháp lý Việt Nam",
@@ -85,7 +97,7 @@ def hero_header() -> rx.Component:
             min_width="0",
         ),
         align="center",
-        spacing="4",
+        spacing="3",
         width="100%",
         padding="12px 0 4px 0",
     )
@@ -153,7 +165,7 @@ def question_panel() -> rx.Component:
         ),
         rx.button(
             rx.icon("search", size=18),
-            rx.cond(QAState.loading, rx.text("Đang tra cứu..."), rx.text("Tra cứu căn cứ pháp lý")),
+            rx.cond(QAState.loading, rx.text("Đang phân tích..."), rx.text("Phân tích và trả lời")),
             on_click=QAState.ask,
             loading=QAState.loading,
             disabled=QAState.question_empty,
