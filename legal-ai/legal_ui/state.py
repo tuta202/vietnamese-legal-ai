@@ -71,6 +71,7 @@ class QAState(rx.State):
     has_conclusion: bool = False
     docs: list[dict] = []
     articles: list[dict] = []
+    has_grounding: bool = False
     selected_article: dict = {}
     has_selected_article: bool = False
     warnings: list[str] = []
@@ -137,6 +138,34 @@ class QAState(rx.State):
             runner = get_runner()
             self._set_stage(0)
             yield
+            route_info = await asyncio.to_thread(runner.route, question)
+            route = route_info.get("route", "legal")
+            if route != "legal":
+                answered = await asyncio.to_thread(
+                    runner.answer_without_rag,
+                    "ui-1",
+                    question,
+                    route,
+                    route_info.get("reason", ""),
+                )
+                self.result = hydrate_result(answered)
+                self.conclusion = self.result.get("conclusion", "")
+                self.analysis = self.result.get("analysis", "")
+                self.conclusion_blocks = self.result.get("conclusion_blocks", [])
+                self.analysis_blocks = self.result.get("analysis_blocks", [])
+                self.has_conclusion = bool(self.result.get("has_conclusion", False))
+                self.docs = []
+                self.articles = []
+                self.has_grounding = False
+                self.warnings = self.result.get("warnings", [])
+                self.has_warnings = bool(self.warnings)
+                self.has_result = True
+                self.status_title = "Đã hoàn tất"
+                self.status_detail = "Câu trả lời đã sẵn sàng hiển thị."
+                self.completed_steps = ["Đã hiểu câu hỏi"]
+                self.has_completed_steps = True
+                self.progress = 100
+                return
             analysis = await asyncio.to_thread(runner.analyze, "ui-1", question)
 
             self._set_stage(1)
@@ -199,6 +228,7 @@ class QAState(rx.State):
             self.has_conclusion = bool(self.result.get("has_conclusion", False))
             self.docs = self.result.get("docs", [])
             self.articles = self.result.get("articles", [])
+            self.has_grounding = bool(self.result.get("has_grounding", False))
             self.warnings = self.result.get("warnings", [])
             self.has_warnings = bool(self.warnings)
             self.has_result = True

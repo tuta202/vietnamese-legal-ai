@@ -592,6 +592,7 @@ def answer_result_state() -> rx.Component:
                     section_title("Phân tích pháp lý"),
                     grounded_answer(QAState.analysis_blocks),
                     box_shadow="none",
+                    min_height=["260px", "320px"],
                 ),
                 spacing="4",
                 align="start",
@@ -601,21 +602,31 @@ def answer_result_state() -> rx.Component:
                 section_title("Câu trả lời"),
                 grounded_answer(QAState.analysis_blocks),
                 box_shadow="none",
+                min_height=["360px", "calc(100vh - 280px)"],
             ),
         ),
-        rx.vstack(
-            section_title("Nguồn văn bản", "Các văn bản mà câu trả lời đang dựa vào."),
-            rx.foreach(QAState.docs, source_doc_card),
-            spacing="3",
-            align="start",
-            width="100%",
-        ),
-        rx.vstack(
-            section_title("Căn cứ pháp lý", "Danh sách điều luật liên quan được hệ thống giữ lại."),
-            rx.foreach(QAState.articles, legal_source_card),
-            spacing="3",
-            align="start",
-            width="100%",
+        rx.cond(
+            QAState.has_grounding,
+            rx.vstack(
+                rx.vstack(
+                    section_title("Nguồn văn bản", "Các văn bản mà câu trả lời đang dựa vào."),
+                    rx.foreach(QAState.docs, source_doc_card),
+                    spacing="3",
+                    align="start",
+                    width="100%",
+                ),
+                rx.vstack(
+                    section_title("Căn cứ pháp lý", "Danh sách điều luật liên quan được hệ thống giữ lại."),
+                    rx.foreach(QAState.articles, legal_source_card),
+                    spacing="3",
+                    align="start",
+                    width="100%",
+                ),
+                spacing="4",
+                align="start",
+                width="100%",
+            ),
+            rx.fragment(),
         ),
         rx.cond(
             QAState.has_warnings,
@@ -632,10 +643,11 @@ def answer_result_state() -> rx.Component:
             ),
             rx.fragment(),
         ),
-        disclaimer_card(),
+        rx.cond(QAState.has_grounding, disclaimer_card(), rx.fragment()),
         spacing="4",
         align="start",
         width="100%",
+        min_height=["420px", "calc(100vh - 220px)"],
     )
 
 

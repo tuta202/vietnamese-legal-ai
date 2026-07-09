@@ -295,6 +295,8 @@ def build_citation_blocks(text: str, articles: list[dict[str, str]]) -> list[lis
 
 def hydrate_result(result: dict[str, Any]) -> dict[str, Any]:
     lookup = get_lookup()
+    debug = result.get("_debug") or {}
+    route = str(debug.get("route") or "legal")
     article_refs = list(result.get("relevant_articles") or [])
     article_cards: list[dict[str, str]] = []
     docs: dict[str, dict[str, str]] = {}
@@ -333,7 +335,7 @@ def hydrate_result(result: dict[str, Any]) -> dict[str, Any]:
 
     answer_parts = split_answer(str(result.get("answer", "")))
     warnings: list[str] = []
-    if not article_cards:
+    if route == "legal" and not article_cards:
         warnings.append("Chưa tìm thấy điều luật đủ tin cậy để grounding câu trả lời.")
     if missing:
         warnings.append(f"Có {len(missing)} điều luật không hydrate được từ corpus local.")
@@ -342,7 +344,6 @@ def hydrate_result(result: dict[str, Any]) -> dict[str, Any]:
     if "thiếu thông tin" in str(result.get("answer", "")).lower():
         warnings.append("Câu trả lời có nêu khả năng thiếu thông tin đầu vào.")
 
-    debug = result.get("_debug") or {}
     sizes = debug.get("sizes") or {}
     return {
         "id": str(result.get("id", "")),
@@ -355,6 +356,9 @@ def hydrate_result(result: dict[str, Any]) -> dict[str, Any]:
         "analysis_blocks": build_citation_blocks(answer_parts["analysis"], article_cards),
         "docs": list(docs.values()),
         "articles": article_cards,
+        "route": route,
+        "route_reason": str(debug.get("route_reason") or ""),
+        "has_grounding": bool(article_cards),
         "warnings": warnings,
         "elapsed_seconds": round(float(debug.get("elapsed_seconds", 0.0)), 2) if debug else 0.0,
         "stage_sizes": sizes,
